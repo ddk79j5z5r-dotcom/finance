@@ -158,3 +158,52 @@ describe('цели', () => {
     expect(suggestGoals(500, goals, new Map([[1, 0], [2, 1000]])).map(s => s.goal.name)).toEqual(['B'])
   })
 })
+
+import { monthAverage, monthTotals, netChangeSince, plannedInMonth, spendByRoot, upcoming } from './calc'
+
+describe('главная и календарь', () => {
+  const settings = { ...DEFAULT_SETTINGS, expectedSalary: R(60000), expectedAdvance: R(60000) }
+  const recurring: Recurring[] = [
+    { id: 1, name: 'Аренда', amount: R(30000), currency: 'RUB', day: 1, categoryId: 2, fundFrom: 'salary', active: true },
+    { id: 2, name: 'Кредит', amount: R(20000), currency: 'RUB', day: 29, categoryId: 4, fundFrom: 'advance', active: true },
+    { id: 3, name: 'Старое', amount: R(1), currency: 'RUB', day: 31, categoryId: 4, fundFrom: 'advance', active: false },
+    { id: 4, name: 'В конце', amount: R(500), currency: 'RUB', day: 31, categoryId: 4, fundFrom: 'advance', active: true },
+  ]
+
+  it('день 31 в феврале — последний день месяца, неактивные не показываются', () => {
+    const ev = plannedInMonth(recurring, settings, '2027-02')
+    expect(ev.map(e => [e.date, e.kind === 'payment' ? e.recurring.name : e.kind])).toEqual([
+      ['2027-02-01', 'Аренда'], ['2027-02-13', 'salary'], ['2027-02-28', 'advance'], ['2027-02-28', 'Кредит'], ['2027-02-28', 'В конце'],
+    ])
+  })
+
+  it('ближайшие события переходят через границу месяца', () => {
+    const ev = upcoming(recurring, settings, '2026-09-29', 14)
+    expect(ev.map(e => [e.date, e.kind === 'payment' ? e.recurring.name : e.kind])).toEqual([
+      ['2026-09-29', 'Кредит'], ['2026-09-30', 'В конце'], ['2026-10-01', 'Аренда'], ['2026-10-13', 'salary'],
+    ])
+  })
+
+  it('итоги месяца, среднее и изменение капитала', () => {
+    const txs = [
+      tx({ date: '2026-07-13', type: 'income', incomeKind: 'salary', amount: R(100000), rub: R(100000) }),
+      tx({ date: '2026-07-20', categoryId: 3, amount: R(40000), rub: R(40000) }),
+      tx({ date: '2026-08-20', categoryId: 3, amount: R(20000), rub: R(20000) }),
+      tx({ date: '2026-09-02', type: 'transfer', amount: R(9500), rub: R(9500), toAccountId: 2, toAmount: R(100), toRub: R(9200) }),
+    ]
+    expect(monthTotals(txs, '2026-09')).toEqual({ income: 0, expense: R(300) })
+    expect(monthAverage(txs, '2026-09')).toEqual({ income: R(50000), expense: R(30000) })
+    expect(monthAverage(txs, '2026-01')).toBeNull()
+    expect(netChangeSince(txs, '2026-08-01')).toBe(-R(20300))
+  })
+
+  it('структура расходов за период', () => {
+    const txs = [
+      tx({ date: '2026-08-20', categoryId: 3, amount: R(20000), rub: R(20000) }),
+      tx({ date: '2026-09-01', categoryId: 2, amount: R(30000), rub: R(30000) }),
+      tx({ date: '2026-09-05', categoryId: 3, amount: R(5000), rub: R(5000) }),
+    ]
+    expect(spendByRoot(cats, txs, '2026-09', '2026-09').map(x => [x.category.name, x.rub])).toEqual([['Жильё', R(30000)], ['Кафе', R(5000)]])
+    expect(spendByRoot(cats, txs, '2026-08', '2026-09').map(x => [x.category.name, x.rub])).toEqual([['Жильё', R(30000)], ['Кафе', R(25000)]])
+  })
+})

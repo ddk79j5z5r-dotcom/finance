@@ -1,75 +1,93 @@
 import { useState } from 'react'
 import { db } from '../db'
 import { fxLoss } from '../domain/calc'
-import { dateLabel, formatMoney } from '../domain/money'
-import { INCOME_LABEL, type Tx } from '../domain/types'
-import { Sheet } from './common'
-import type { Data } from './data'
+import { formatMoney, todayISO } from '../domain/money'
+import type { Tx, TxType } from '../domain/types'
+import { Money, Segmented, Sheet, useOnce } from './common'
+import { txView, type Data } from './data'
 import { Entry } from './Entry'
+import { Badge, Icon } from './icons'
+
+type Filter = 'all' | TxType
+
+function dayTitle(date: string) {
+  const today = todayISO()
+  const y = new Date(); y.setDate(y.getDate() - 1)
+  const label = new Date(date + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: date.slice(0, 4) === today.slice(0, 4) ? undefined : 'numeric' })
+  if (date === today) return `Сегодня, ${label}`
+  if (date === todayISO(y)) return `Вчера, ${label}`
+  return label
+}
 
 export function History({ data }: { data: Data }) {
   const [edit, setEdit] = useState<Tx | null>(null)
-  const [limit, setLimit] = useState(100)
-  const acc = new Map(data.accounts.map(a => [a.id!, a]))
-  const cat = new Map(data.categories.map(c => [c.id!, c]))
+  const [filter, setFilter] = useState<Filter>('all')
+  const [search, setSearch] = useState<string | null>(null)
+  const [limit, setLimit] = useState(150)
 
-  const sorted = [...data.txs].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt).slice(0, limit)
+  const q = search?.trim().toLowerCase() ?? ''
+  const all = [...data.txs]
+    .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt)
+    .filter(t => filter === 'all' || t.type === filter)
+    .filter(t => {
+      if (!q) return true
+      const v = txView(data, t)
+      return `${v.title} ${v.sub} ${t.comment}`.toLowerCase().includes(q) || formatMoney(t.amount).replace(/\s/g, '').includes(q.replace(/\s/g, ''))
+    })
+  const shown = all.slice(0, limit)
   const byDay = new Map<string, Tx[]>()
-  for (const t of sorted) byDay.set(t.date, [...(byDay.get(t.date) ?? []), t])
+  for (const t of shown) byDay.set(t.date, [...(byDay.get(t.date) ?? []), t])
 
-  function title(t: Tx) {
-    if (t.type === 'income') return INCOME_LABEL[t.incomeKind!]
-    if (t.type === 'transfer') return `${acc.get(t.accountId)?.name} → ${acc.get(t.toAccountId!)?.name}`
-    const c = cat.get(t.categoryId!)
-    const parent = c?.parentId != null ? cat.get(c.parentId) : undefined
-    return parent ? `${parent.name} · ${c!.name}` : c?.name ?? '—'
-  }
-
-  function amount(t: Tx) {
-    const a = acc.get(t.accountId)
-    if (t.type === 'transfer') {
-      const to = acc.get(t.toAccountId!)
-      return a?.currency === to?.currency
-        ? formatMoney(t.amount, a?.currency)
-        : `${formatMoney(t.amount, a?.currency)} → ${formatMoney(t.toAmount!, to?.currency)}`
-    }
-    return `${t.type === 'expense' ? '−' : '+'}${formatMoney(t.amount, a?.currency)}`
-  }
-
-  async function remove(t: Tx) {
+  const remove = useOnce(async (t: Tx) => {
     if (!confirm('Удалить операцию?')) return
     await db.transaction('rw', db.txs, db.allocations, async () => {
       await db.txs.delete(t.id!)
       await db.allocations.where('txId').equals(t.id!).delete()
     })
     setEdit(null)
-  }
+  })
 
   return (
     <div className="page">
-      <h1>Операции</h1>
-      {sorted.length === 0 && <p className="hint">Пока пусто. Первую операцию можно записать на вкладке «Ввод».</p>}
+      <div className="page-head">
+        <h1>Операции</h1>
+        <button className={search !== null ? 'icon-btn on' : 'icon-btn'} aria-label="Поиск" onClick={() => setSearch(s => (s === null ? '' : null))}>
+          <Icon name="search" />
+        </button>
+      </div>
+      {search !== null && (
+        <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Категория, комментарий, сумма" style={{ marginBottom: 12 }} />
+      )}
+      <Segmented value={filter} onChange={setFilter} options={[
+        { value: 'all', label: 'Все' }, { value: 'income', label: 'Доходы' }, { value: 'expense', label: 'Расходы' }, { value: 'transfer', label: 'Переводы' },
+      ]} />
+
+      {shown.length === 0 && <p className="hint">{data.txs.length ? 'Ничего не найдено.' : 'Пока пусто — нажми «+» внизу, чтобы записать первую операцию.'}</p>}
       {[...byDay].map(([day, list]) => (
         <div key={day}>
-          <div className="day">{dateLabel(day)}</div>
-          <div className="card list">
-            {list.map(t => (
-              <button className="tx" key={t.id} onClick={() => setEdit(t)}>
-                <div>
-                  <div>{title(t)}</div>
-                  <div className="muted small">
-                    {t.type !== 'transfer' && acc.get(t.accountId)?.name}
-                    {t.comment && ` · ${t.comment}`}
-                    {t.type === 'transfer' && fxLoss(t) !== 0 && `разница курса ${formatMoney(fxLoss(t))}`}
+          <div className="day">{dayTitle(day)}</div>
+          <div className="card tight">
+            {list.map(t => {
+              const v = txView(data, t)
+              const acc = data.accounts.find(a => a.id === t.accountId)
+              const to = data.accounts.find(a => a.id === t.toAccountId)
+              const loss = fxLoss(t)
+              return (
+                <button className="row" key={t.id} onClick={() => setEdit(t)}>
+                  <Badge icon={v.icon} tone={v.tone} />
+                  <div className="body"><div className="title">{v.title}</div><div className="sub">{v.sub}</div></div>
+                  <div className={`amt ${t.type === 'income' ? 'pos' : t.type === 'expense' ? 'neg' : ''}`}>
+                    {t.type === 'expense' ? '−' : t.type === 'income' ? '+' : ''}<Money v={t.amount} cur={acc?.currency} />
+                    {t.type === 'transfer' && to && to.currency !== acc?.currency && <div className="sub">→ <Money v={t.toAmount!} cur={to.currency} /></div>}
+                    {loss !== 0 && <div className="sub">курс {loss > 0 ? '−' : '+'}{formatMoney(Math.abs(loss))}</div>}
                   </div>
-                </div>
-                <span className={t.type === 'income' ? 'pos' : t.type === 'expense' ? '' : 'muted'}>{amount(t)}</span>
-              </button>
-            ))}
+                </button>
+              )
+            })}
           </div>
         </div>
       ))}
-      {data.txs.length > limit && <button className="secondary" onClick={() => setLimit(l => l + 200)}>Показать ещё</button>}
+      {all.length > limit && <button className="secondary" onClick={() => setLimit(l => l + 300)}>Показать ещё</button>}
 
       {edit && (
         <Sheet title="Операция" onClose={() => setEdit(null)}>

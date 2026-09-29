@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { LockRow } from '../db'
 import { checkPin, unlockWithFaceId } from '../lock'
+import { Icon } from './icons'
 
 export function LockScreen({ lock, onUnlock }: { lock: LockRow; onUnlock: () => void }) {
   const [pin, setPin] = useState('')
@@ -23,7 +24,7 @@ export function LockScreen({ lock, onUnlock }: { lock: LockRow; onUnlock: () => 
 
   return (
     <div className="lock">
-      <div className="lock-icon">🔒</div>
+      <div className="lock-icon"><Icon name="lock" size={32} /></div>
       <h1>Финансы</h1>
       {lock.credentialId && <button className="primary" onClick={faceId}>Войти по Face ID</button>}
       <input

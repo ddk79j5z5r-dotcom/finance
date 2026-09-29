@@ -278,3 +278,90 @@ export function allocationOf(d: Distribution, split = d.split): Record<Bucket, n
   const reserved = d.reserves.reduce((s, r) => s + r.rub, 0)
   return { needs: split.needs + reserved, wants: split.wants, savings: split.savings }
 }
+
+// ---------- Главная, календарь, аналитика ----------
+
+/** Доходы и расходы за месяц (₽). Разница курса при обмене считается расходом. */
+export function monthTotals(txs: Tx[], month: string): { income: number; expense: number } {
+  let income = 0
+  let expense = 0
+  for (const t of txs) {
+    if (monthOf(t.date) !== month) continue
+    if (t.type === 'income') income += t.rub
+    else if (t.type === 'expense') expense += t.rub
+    else expense += fxLoss(t)
+  }
+  return { income, expense }
+}
+
+/** Среднее за N месяцев перед данным (для сравнения «≈ ср.»). Месяцы без операций не учитываются. */
+export function monthAverage(txs: Tx[], month: string, n = 3): { income: number; expense: number } | null {
+  const months = Array.from({ length: n }, (_, i) => shiftMonth(month, -(i + 1)))
+  const withData = months.filter(m => txs.some(t => monthOf(t.date) === m))
+  if (!withData.length) return null
+  const sum = withData.map(m => monthTotals(txs, m)).reduce((a, b) => ({ income: a.income + b.income, expense: a.expense + b.expense }))
+  return { income: Math.round(sum.income / withData.length), expense: Math.round(sum.expense / withData.length) }
+}
+
+/** Изменение общего капитала (₽) начиная с даты включительно. */
+export function netChangeSince(txs: Tx[], fromDate: string): number {
+  let s = 0
+  for (const t of txs) {
+    if (t.date < fromDate) continue
+    if (t.type === 'income') s += t.rub
+    else if (t.type === 'expense') s -= t.rub
+    else s -= fxLoss(t)
+  }
+  return s
+}
+
+export type PlannedEvent =
+  | { date: string; kind: 'payment'; recurring: Recurring }
+  | { date: string; kind: 'salary' | 'advance'; amount: number }
+
+const daysIn = (y: number, m: number) => new Date(y, m, 0).getDate()
+const iso = (y: number, m: number, d: number) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+
+/** Плановые события месяца: регулярные платежи и дни выплат. День 31 в коротком месяце — последний день. */
+export function plannedInMonth(recurring: Recurring[], settings: Settings, month: string): PlannedEvent[] {
+  const [y, m] = month.split('-').map(Number)
+  const day = (d: number) => iso(y, m, Math.min(d, daysIn(y, m)))
+  const events: PlannedEvent[] = [
+    { date: day(settings.salaryDay), kind: 'salary', amount: settings.expectedSalary },
+    { date: day(settings.advanceDay), kind: 'advance', amount: settings.expectedAdvance },
+    ...recurring.filter(r => r.active).map(r => ({ date: day(r.day), kind: 'payment' as const, recurring: r })),
+  ]
+  return events.sort((a, b) => a.date.localeCompare(b.date))
+}
+
+/** Ближайшие плановые события начиная с даты, на `days` дней вперёд. */
+export function upcoming(recurring: Recurring[], settings: Settings, from: string, days = 31): PlannedEvent[] {
+  const end = new Date(from + 'T00:00:00')
+  end.setDate(end.getDate() + days)
+  const to = iso(end.getFullYear(), end.getMonth() + 1, end.getDate())
+  const months = [monthOf(from), shiftMonth(monthOf(from), 1), shiftMonth(monthOf(from), 2)]
+  return months.flatMap(m => plannedInMonth(recurring, settings, m)).filter(e => e.date >= from && e.date <= to)
+}
+
+/** Расходы по конвертам за диапазон месяцев (включительно), по убыванию. */
+export function spendByRoot(categories: Category[], txs: Tx[], from: string, to: string): { category: Category; rub: number }[] {
+  const sums = new Map<number, number>()
+  for (let m = from; m <= to; m = shiftMonth(m, 1)) {
+    for (const [id, v] of spentByEnvelope(categories, txs, m)) sums.set(id, (sums.get(id) ?? 0) + v)
+  }
+  return [...sums]
+    .map(([id, rub]) => ({ category: categories.find(c => c.id === id)!, rub }))
+    .filter(x => x.category && x.rub > 0)
+    .sort((a, b) => b.rub - a.rub)
+}
+
+/** Доходы по видам за диапазон месяцев, по убыванию. */
+export function incomeByKind(txs: Tx[], from: string, to: string): { kind: IncomeKind; rub: number }[] {
+  const sums = new Map<IncomeKind, number>()
+  for (const t of txs) {
+    const m = monthOf(t.date)
+    if (t.type !== 'income' || m < from || m > to) continue
+    sums.set(t.incomeKind!, (sums.get(t.incomeKind!) ?? 0) + t.rub)
+  }
+  return [...sums].map(([kind, rub]) => ({ kind, rub })).sort((a, b) => b.rub - a.rub)
+}

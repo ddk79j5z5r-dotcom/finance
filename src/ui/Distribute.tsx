@@ -80,7 +80,7 @@ export function Distribute({ data, tx, onClose }: { data: Data; tx: Tx; onClose:
         </div>
       )}
 
-      <button className="primary" onClick={accept}>Принять</button>
+      <button className="save" onClick={accept}>Принять</button>
     </Sheet>
   )
 }

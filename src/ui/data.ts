@@ -1,8 +1,10 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, getSettings } from '../db'
-import { balances, goalProgress } from '../domain/calc'
 import { convertToRub } from '../domain/rates'
-import type { Account, Category, Currency, Rate } from '../domain/types'
+import { balances, goalProgress, rootOf } from '../domain/calc'
+import type { Account, Bucket, Category, Currency, Rate, Tx } from '../domain/types'
+import { INCOME_LABEL } from '../domain/types'
+import { categoryIcon, INCOME_ICON, type IconName } from './icons'
 
 /** Все данные приложения одним запросом; объёмы для личного учёта небольшие. */
 export function useData() {
@@ -34,3 +36,22 @@ export const activeAccounts = (accounts: Account[]) => accounts.filter(a => !a.a
 export const rootCategories = (cats: Category[]) => cats.filter(c => c.parentId == null && !c.archived && !c.system)
 export const childrenOf = (cats: Category[], id: number) => cats.filter(c => c.parentId === id && !c.archived)
 export const rateHint = (rate: Rate | null) => (rate ? `курс ЦБ на ${new Date(rate.date).toLocaleDateString('ru-RU')}` : 'курса пока нет')
+
+/** Иконка, тон и подписи операции для списков. */
+export function txView(data: Data, t: Tx): { icon: IconName; tone: Bucket | 'income' | 'transfer'; title: string; sub: string } {
+  const acc = (id?: number) => data.accounts.find(a => a.id === id)?.name ?? ''
+  if (t.type === 'income') {
+    return { icon: INCOME_ICON[t.incomeKind!], tone: 'income', title: INCOME_LABEL[t.incomeKind!], sub: [acc(t.accountId), t.comment].filter(Boolean).join(' · ') }
+  }
+  if (t.type === 'transfer') {
+    return { icon: 'transfer', tone: 'transfer', title: `${acc(t.accountId)} → ${acc(t.toAccountId)}`, sub: t.comment || 'Перевод' }
+  }
+  const c = data.categories.find(x => x.id === t.categoryId)
+  const root = rootOf(data.categories, t.categoryId)
+  return {
+    icon: categoryIcon(root),
+    tone: root?.bucket ?? 'wants',
+    title: t.comment || c?.name || '—',
+    sub: [c && root && c.id !== root.id ? `${root.name} · ${c.name}` : root?.name, acc(t.accountId)].filter(Boolean).join(' · '),
+  }
+}

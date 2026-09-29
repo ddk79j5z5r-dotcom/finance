@@ -5,44 +5,68 @@ import { BUCKET_LABEL, BUCKETS, CURRENCIES, type Bucket, type Category, type Cur
 import { disableLock, enrollFaceId, faceIdSupported, getLock, isLockEnabled, setPin } from '../lock'
 import { AmountInput, Chips, CUR_SUFFIX, fromInput, Money, Sheet, toInput, useOnce } from './common'
 import { childrenOf, rateHint, rootCategories, type Data } from './data'
+import { Icon, type IconName } from './icons'
 
 export type MoreSection = 'rule' | 'pay' | 'categories' | 'recurring' | 'security' | 'backup' | 'reminders'
+export type MorePage = 'calendar' | 'analytics' | 'accounts'
 
-const SECTIONS: { id: MoreSection; label: string }[] = [
-  { id: 'backup', label: 'Бэкап и Excel' },
-  { id: 'pay', label: 'Выплаты' },
-  { id: 'rule', label: 'Правило распределения' },
-  { id: 'recurring', label: 'Регулярные платежи' },
-  { id: 'categories', label: 'Категории' },
-  { id: 'security', label: 'Face ID и PIN' },
-  { id: 'reminders', label: 'Напоминания' },
+const PAGES: { id: MorePage; label: string; sub: string; icon: IconName }[] = [
+  { id: 'calendar', label: 'Календарь', sub: 'платежи и выплаты по дням', icon: 'calendar' },
+  { id: 'analytics', label: 'Аналитика', sub: 'структура и динамика', icon: 'chart' },
+  { id: 'accounts', label: 'Счета и цели', sub: 'балансы, накопления', icon: 'wallet' },
 ]
 
-export function More({ data, section, setSection }: { data: Data; section: MoreSection | null; setSection: (s: MoreSection | null) => void }) {
+const SECTIONS: { id: MoreSection; label: string; icon: IconName }[] = [
+  { id: 'backup', label: 'Бэкап и Excel', icon: 'download' },
+  { id: 'pay', label: 'Выплаты', icon: 'banknote' },
+  { id: 'rule', label: 'Правило распределения', icon: 'sliders' },
+  { id: 'recurring', label: 'Регулярные платежи', icon: 'repeat' },
+  { id: 'categories', label: 'Категории', icon: 'tag' },
+  { id: 'security', label: 'Face ID и PIN', icon: 'lock' },
+  { id: 'reminders', label: 'Напоминания', icon: 'bell' },
+]
+
+export function More({ data, section, setSection, onOpenPage }: {
+  data: Data; section: MoreSection | null; setSection: (s: MoreSection | null) => void; onOpenPage: (p: MorePage) => void
+}) {
   const [refreshing, setRefreshing] = useState(false)
   const r = data.latestRate
   return (
     <div className="page">
-      <h1>Ещё</h1>
-      <div className="card list">
+      <div className="page-head"><h1>Ещё</h1></div>
+      <div className="card tight">
+        {PAGES.map(p => (
+          <button className="row" key={p.id} onClick={() => onOpenPage(p.id)}>
+            <span className="badge" style={{ width: 40, height: 40, background: 'var(--accent-soft)', color: 'var(--accent)' }}><Icon name={p.icon} size={20} /></span>
+            <div className="body"><div className="title">{p.label}</div><div className="sub">{p.sub}</div></div>
+            <span className="chev"><Icon name="right" size={18} /></span>
+          </button>
+        ))}
+      </div>
+      <div className="section-title"><h3>Настройки</h3></div>
+      <div className="card tight">
         {SECTIONS.map(s => (
-          <button className="line plain nav" key={s.id} onClick={() => setSection(s.id)}>
-            <span>{s.label}</span><span className="muted">›</span>
+          <button className="row" key={s.id} onClick={() => setSection(s.id)}>
+            <span className="badge" style={{ width: 34, height: 34, background: 'var(--card-2)', color: 'var(--text-2)' }}><Icon name={s.icon} size={18} /></span>
+            <div className="body title">{s.label}</div>
+            <span className="chev"><Icon name="right" size={18} /></span>
           </button>
         ))}
       </div>
       <div className="card">
-        <h3>Курсы ЦБ</h3>
+        <div className="line" style={{ paddingTop: 0 }}>
+          <h3>Курсы ЦБ</h3>
+          <button className="link small" disabled={refreshing} onClick={async () => { setRefreshing(true); await refreshLatestRate(db); setRefreshing(false) }}>
+            {refreshing ? 'Обновляю…' : 'Обновить'}
+          </button>
+        </div>
         {r ? (
           <>
-            <div className="line"><span>USD</span><span className="money">{r.USD.toFixed(2)} ₽</span></div>
-            <div className="line"><span>EUR</span><span className="money">{r.EUR.toFixed(2)} ₽</span></div>
+            <div className="line"><span>USD</span><span className="num">{r.USD.toFixed(2)} ₽</span></div>
+            <div className="line"><span>EUR</span><span className="num">{r.EUR.toFixed(2)} ₽</span></div>
             <div className="muted small">{rateHint(r)}</div>
           </>
         ) : <p className="hint">Курсов ещё нет — нужен интернет.</p>}
-        <button className="link small" disabled={refreshing} onClick={async () => { setRefreshing(true); await refreshLatestRate(db); setRefreshing(false) }}>
-          {refreshing ? 'Обновляю…' : 'Обновить'}
-        </button>
       </div>
 
       {section && (
@@ -73,7 +97,7 @@ function RuleSection({ data, onDone }: { data: Data; onDone: () => void }) {
       ))}
       {sum !== 100 && <p className="error">Сумма должна быть 100%, сейчас {sum}%</p>}
       <p className="hint">Считается на весь месяц: зарплата + аванс + премия. Переводы от родителей не входят.</p>
-      <button className="primary" disabled={sum !== 100} onClick={async () => { await saveSettings({ rule }); onDone() }}>Сохранить</button>
+      <button className="save" disabled={sum !== 100} onClick={async () => { await saveSettings({ rule }); onDone() }}>Сохранить</button>
     </>
   )
 }
@@ -96,7 +120,7 @@ function PaySection({ data, onDone }: { data: Data; onDone: () => void }) {
       <label className="field-label">Ожидаемый аванс</label>
       <AmountInput value={advance} onChange={setAdvance} suffix="₽" />
       <p className="hint">Нужно, чтобы план 50/30/20 был виден с начала месяца. Когда выплата придёт, в расчёт пойдёт фактическая сумма. Премию заранее не планируем.</p>
-      <button className="primary" onClick={async () => {
+      <button className="save" onClick={async () => {
         await saveSettings({ salaryDay: day(salaryDay), advanceDay: day(advanceDay), expectedSalary: fromInput(salary) ?? 0, expectedAdvance: fromInput(advance) ?? 0 })
         onDone()
       }}>Сохранить</button>
@@ -114,14 +138,14 @@ function CategoriesSection({ data }: { data: Data }) {
           {BUCKETS.map(b => (
             <div key={b}>
               <div className="day">{BUCKET_LABEL[b]}</div>
-              <div className="card list">
+              <div className="card tight">
                 {roots.filter(c => c.bucket === b).map(c => (
                   <div key={c.id}>
-                    <button className="line plain nav" onClick={() => setEdit(c)}><span>{c.name}</span><span className="muted">›</span></button>
+                    <button className="row" onClick={() => setEdit(c)}><span>{c.name}</span><span className="muted">›</span></button>
                     {childrenOf(data.categories, c.id!).map(s => (
-                      <button className="line plain nav sub" key={s.id} onClick={() => setEdit(s)}><span>{s.name}</span><span className="muted">›</span></button>
+                      <button className="row" style={{ paddingLeft: 20 }} key={s.id} onClick={() => setEdit(s)}><span>{s.name}</span><span className="muted">›</span></button>
                     ))}
-                    <button className="link small sub" onClick={() => setEdit({ parentId: c.id!, bucket: c.bucket })}>+ подкатегория</button>
+                    <button className="link small" style={{ display: "block", padding: "4px 0 12px 20px" }} onClick={() => setEdit({ parentId: c.id!, bucket: c.bucket })}>+ подкатегория</button>
                   </div>
                 ))}
               </div>
@@ -162,7 +186,7 @@ function CategoryForm({ data, cat, onDone }: { data: Data; cat: Partial<Category
           <Chips options={(['needs', 'wants'] as Bucket[]).map(b => ({ value: b, label: BUCKET_LABEL[b] }))} value={bucket} onChange={setBucket} />
         </>
       )}
-      <button className="primary" onClick={save}>Сохранить</button>
+      <button className="save" onClick={save}>Сохранить</button>
       {cat.id && <button className="danger" onClick={archive}>Скрыть</button>}
       <button className="secondary" onClick={onDone}>Назад</button>
     </>
@@ -174,9 +198,9 @@ function RecurringSection({ data }: { data: Data }) {
   if (edit) return <RecurringForm data={data} r={edit} onDone={() => setEdit(null)} />
   return (
     <>
-      <div className="card list">
+      <div className="card tight">
         {[...data.recurring].sort((a, b) => a.day - b.day).map(r => (
-          <button className="line plain nav" key={r.id} onClick={() => setEdit(r)}>
+          <button className="row" key={r.id} onClick={() => setEdit(r)}>
             <span className={r.active ? '' : 'muted'}>{r.day}-го · {r.name}<div className="muted small">из {r.fundFrom === 'salary' ? 'зарплаты' : 'аванса'}</div></span>
             <Money v={r.amount} cur={r.currency} />
           </button>
@@ -222,7 +246,7 @@ function RecurringForm({ data, r, onDone }: { data: Data; r: Partial<Recurring>;
       <label className="field-label">Резервировать из</label>
       <Chips options={[{ value: 'salary' as const, label: `Зарплаты (${data.settings.salaryDay}-го)` }, { value: 'advance' as const, label: `Аванса (${data.settings.advanceDay}-го)` }]} value={fundFrom} onChange={setFundFrom} />
       <label className="check"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} /> Активен</label>
-      <button className="primary" onClick={save}>Сохранить</button>
+      <button className="save" onClick={save}>Сохранить</button>
       {r.id && <button className="danger" onClick={async () => { if (confirm('Удалить платёж?')) { await db.recurring.delete(r.id!); onDone() } }}>Удалить</button>}
       <button className="secondary" onClick={onDone}>Назад</button>
     </>
@@ -264,7 +288,7 @@ function SecuritySection() {
       <p className="hint">Замок на вход в приложение. Сначала задай запасной PIN из 6 цифр, потом включи Face ID.</p>
       <label className="field-label">{enabled ? 'Сменить PIN' : 'Задать PIN'}</label>
       <input inputMode="numeric" type="password" maxLength={6} value={pin} onChange={e => setPinValue(e.target.value.replace(/\D/g, ''))} placeholder="••••••" />
-      <button className="primary" onClick={savePin}>Сохранить PIN</button>
+      <button className="save" onClick={savePin}>Сохранить PIN</button>
       {enabled && faceIdSupported() && (
         <button className="secondary" onClick={faceId}>{hasFaceId ? 'Перенастроить Face ID' : 'Включить Face ID'}</button>
       )}
@@ -331,7 +355,7 @@ function BackupSection({ data }: { data: Data }) {
         Один Excel-файл — это и бэкап, и таблица для анализа на Mac.
       </p>
       <p className="hint">Последний бэкап: {last ? new Date(last).toLocaleString('ru-RU') : 'не было'}</p>
-      <button className="primary" disabled={!!busy} onClick={doExport}>{busy === 'export' ? 'Готовлю файл…' : 'Выгрузить в Excel'}</button>
+      <button className="save" disabled={!!busy} onClick={doExport}>{busy === 'export' ? 'Готовлю файл…' : 'Выгрузить в Excel'}</button>
       <p className="hint">В меню «Поделиться» выбери «Сохранить в Файлы» → iCloud Drive.</p>
       <button className="secondary" disabled={!!busy} onClick={() => fileRef.current?.click()}>{busy === 'import' ? 'Восстанавливаю…' : 'Восстановить из файла'}</button>
       <input ref={fileRef} type="file" accept=".xlsx" hidden onChange={e => e.target.files?.[0] && doImport(e.target.files[0])} />

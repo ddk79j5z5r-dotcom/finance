@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { db, saveSettings } from '../db'
-import { formatMoney } from '../domain/money'
 import { CURRENCIES, type Account, type Currency, type Goal } from '../domain/types'
 import { AmountInput, Bar, Chips, CUR_SUFFIX, fromInput, Money, Sheet, toInput, useOnce } from './common'
 import { activeAccounts, rateHint, type Data } from './data'
+import { Icon } from './icons'
 
 export function Accounts({ data }: { data: Data }) {
   const [editAcc, setEditAcc] = useState<Partial<Account> | null>(null)
@@ -13,9 +13,10 @@ export function Accounts({ data }: { data: Data }) {
 
   return (
     <div className="page">
-      <h1>Счета и цели</h1>
-      <div className="card">
-        <div className="line"><span>Всего в рублях</span><strong><Money v={totalRub} /></strong></div>
+      <div className="page-head"><h1>Счета и цели</h1></div>
+      <div className="card hero">
+        <div className="label"><span>Всего в рублях</span></div>
+        <div className="big"><Money v={totalRub} round /></div>
         <div className="muted small">{rateHint(data.latestRate)}</div>
       </div>
 
@@ -23,22 +24,28 @@ export function Accounts({ data }: { data: Data }) {
         const b = data.bal.get(a.id!) ?? 0
         const goals = data.progress.filter(p => p.goal.accountId === a.id)
         return (
-          <div className="card" key={a.id}>
-            <button className="line plain" onClick={() => setEditAcc(a)}>
-              <span>{a.name}{a.id === data.settings.defaultAccountId && <span className="muted small"> · основной</span>}</span>
-              <strong className={b < 0 ? 'neg' : ''}><Money v={b} cur={a.currency} /></strong>
+          <div className="card" key={a.id} style={{ paddingTop: 6, paddingBottom: 10 }}>
+            <button className="row" onClick={() => setEditAcc(a)}>
+              <span className="badge" style={{ width: 40, height: 40, background: 'var(--accent-soft)', color: 'var(--accent)' }}><Icon name="wallet" size={20} /></span>
+              <div className="body">
+                <div className="title">{a.name}</div>
+                <div className="sub">{a.currency}{a.id === data.settings.defaultAccountId ? ' · основной' : ''}</div>
+              </div>
+              <div className={`amt ${b < 0 ? 'neg' : ''}`}>
+                <Money v={b} cur={a.currency} />
+                {a.currency !== 'RUB' && <div className="sub">≈ <Money v={data.toRub(b, a.currency) ?? 0} round /></div>}
+              </div>
             </button>
-            {a.currency !== 'RUB' && <div className="muted small right">≈ {formatMoney(data.toRub(b, a.currency) ?? 0)}</div>}
             {goals.map(p => (
-              <button className="goal" key={p.goal.id} onClick={() => setEditGoal(p.goal)}>
-                <div className="line small">
-                  <span>🎯 {p.goal.name}</span>
-                  <span>{formatMoney(p.saved, a.currency)} <span className="muted">из {formatMoney(p.goal.target, a.currency)}</span></span>
+              <button key={p.goal.id} onClick={() => setEditGoal(p.goal)} style={{ display: 'block', width: '100%', padding: '8px 0' }}>
+                <div className="line small" style={{ padding: 0 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="target" size={16} /> {p.goal.name}</span>
+                  <span className="num"><Money v={p.saved} cur={a.currency} /> <span className="muted">из <Money v={p.goal.target} cur={a.currency} /></span></span>
                 </div>
-                <Bar value={p.saved} max={p.goal.target} />
+                <Bar value={p.saved} max={p.goal.target} color="var(--savings)" />
               </button>
             ))}
-            <button className="link small" onClick={() => setEditGoal({ accountId: a.id })}>+ цель на этом счёте</button>
+            <button className="link small" style={{ padding: '6px 0' }} onClick={() => setEditGoal({ accountId: a.id })}>+ цель на этом счёте</button>
           </div>
         )
       })}
@@ -82,7 +89,7 @@ function AccountSheet({ data, acc, onClose }: { data: Data; acc: Partial<Account
       <AmountInput value={opening} onChange={setOpening} suffix={CUR_SUFFIX[currency]} />
       <p className="hint">Сколько было на счёте на момент начала учёта.</p>
       <label className="check"><input type="checkbox" checked={isDefault} onChange={e => setIsDefault(e.target.checked)} /> Основной счёт для ввода</label>
-      <button className="primary" onClick={save}>Сохранить</button>
+      <button className="save" onClick={save}>Сохранить</button>
       {acc.id && <button className="danger" onClick={archive}>Скрыть счёт</button>}
     </Sheet>
   )
@@ -132,7 +139,7 @@ function GoalSheet({ data, goal, onClose }: { data: Data; goal: Partial<Goal>; o
         {activeAccounts(data.accounts).map(a => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
       </select>
       {siblings.length > 0 && <p className="hint">На счёте несколько целей: баланс заполняет их по очереди, сначала более приоритетные.</p>}
-      <button className="primary" onClick={save}>Сохранить</button>
+      <button className="save" onClick={save}>Сохранить</button>
       {goal.id && <button className="secondary" onClick={raise}>Поднять приоритет</button>}
       {goal.id && <button className="danger" onClick={remove}>Удалить цель</button>}
     </Sheet>

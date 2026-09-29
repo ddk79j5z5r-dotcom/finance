@@ -3,7 +3,8 @@ import { db } from '../db'
 import { formatMoney, todayISO } from '../domain/money'
 import { convertToRub, rateFor } from '../domain/rates'
 import { INCOME_LABEL, type IncomeKind, type Tx, type TxType } from '../domain/types'
-import { AmountInput, Chips, CUR_SUFFIX, fromInput, toInput, useOnce } from './common'
+import { AmountInput, Chips, CUR_SUFFIX, fromInput, Segmented, toInput, useOnce } from './common'
+import { categoryIcon, INCOME_ICON } from './icons'
 import { activeAccounts, childrenOf, rootCategories, type Data } from './data'
 
 const TYPES: { value: TxType; label: string }[] = [
@@ -11,7 +12,7 @@ const TYPES: { value: TxType; label: string }[] = [
   { value: 'income', label: 'Доход' },
   { value: 'transfer', label: 'Перевод' },
 ]
-const KINDS = (Object.keys(INCOME_LABEL) as IncomeKind[]).map(k => ({ value: k, label: INCOME_LABEL[k] }))
+const KINDS = (Object.keys(INCOME_LABEL) as IncomeKind[]).map(k => ({ value: k, label: INCOME_LABEL[k], icon: INCOME_ICON[k] }))
 
 /** Быстрый ввод операции; с `tx` — редактирование существующей. */
 export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx: Tx) => void }) {
@@ -99,17 +100,13 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
     }
   })
 
-  const accOptions = accounts.map(a => ({ value: a.id!, label: `${a.name} ${CUR_SUFFIX[a.currency]}` }))
+  const accOptions = accounts.map(a => ({ value: a.id!, label: `${a.name} ${CUR_SUFFIX[a.currency]}`, icon: 'wallet' as const }))
 
   return (
     <div className="entry">
-      <div className="segmented">
-        {TYPES.map(t => (
-          <button key={t.value} className={type === t.value ? 'on' : ''} onClick={() => setType(t.value)}>{t.label}</button>
-        ))}
-      </div>
+      <Segmented className="type" value={type} onChange={setType} options={TYPES} />
 
-      <AmountInput value={amount} onChange={setAmount} big autoFocus={!tx} suffix={acc ? CUR_SUFFIX[acc.currency] : ''} />
+      <AmountInput value={amount} onChange={setAmount} big autoFocus={!tx} tone={type} suffix={acc ? CUR_SUFFIX[acc.currency] : ''} />
       {rubHint != null && <div className="hint center">≈ {formatMoney(rubHint)}</div>}
 
       <label className="field-label">{type === 'transfer' ? 'Откуда' : 'Счёт'}</label>
@@ -118,7 +115,7 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
       {type === 'expense' && (
         <>
           <label className="field-label">Категория</label>
-          <Chips options={roots.map(c => ({ value: c.id!, label: c.name }))} value={rootId} onChange={v => { setRootId(v); setSubId(null) }} />
+          <Chips options={roots.map(c => ({ value: c.id!, label: c.name, icon: categoryIcon(c) }))} value={rootId} onChange={v => { setRootId(v); setSubId(null) }} />
           {subs.length > 0 && (
             <>
               <label className="field-label">Подкатегория <span className="muted">(необязательно)</span></label>
@@ -161,7 +158,7 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
       </div>
 
       {error && <div className="error">{error}</div>}
-      <button className="primary" disabled={saving} onClick={save}>{tx ? 'Сохранить' : 'Записать'}</button>
+      <button className="save" disabled={saving} onClick={save}>Сохранить</button>
     </div>
   )
 }
