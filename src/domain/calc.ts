@@ -365,3 +365,111 @@ export function incomeByKind(txs: Tx[], from: string, to: string): { kind: Incom
   }
   return [...sums].map(([kind, rub]) => ({ kind, rub })).sort((a, b) => b.rub - a.rub)
 }
+
+// ---------- Прогноз, норма сбережений, капитал ----------
+
+/** Доля дохода, которая осталась несъеденной: (доходы − расходы) / доходы. null, если доходов нет. */
+export function savingsRate(t: { income: number; expense: number }): number | null {
+  if (t.income <= 0) return null
+  return (t.income - t.expense) / t.income
+}
+
+export interface Forecast {
+  income: number // ожидаемый доход за месяц (факт + ещё не пришедшие зарплата/аванс)
+  expense: number // ожидаемые расходы
+  balance: number // income − expense
+  fixedLeft: number // неоплаченные регулярные платежи
+  variablePace: number // переменные траты за весь месяц: уже потрачено + оценка до конца
+}
+
+/** Был ли регулярный платёж уже оплачен в этом месяце: расход той же категории на сумму ±10% (или с его названием). */
+export function isPaid(r: Recurring, txs: Tx[], month: string, rubOf: (r: Recurring) => number = x => x.amount): boolean {
+  const target = rubOf(r)
+  return txs.some(t => t.type === 'expense' && monthOf(t.date) === month && t.categoryId === r.categoryId &&
+    (t.comment === r.name || Math.abs(t.rub - target) <= target * 0.1))
+}
+
+/**
+ * Прогноз до конца месяца. Регулярные платежи считаются фиксированными: оплаченные — по факту,
+ * остальные — по плану. Остальные траты экстраполируются по темпу с начала месяца.
+ */
+export function monthForecast(
+  data: { txs: Tx[]; recurring: Recurring[] },
+  settings: Settings,
+  today: string,
+  rubOf: (r: Recurring) => number = x => x.amount,
+): Forecast {
+  const month = monthOf(today)
+  const [y, m] = month.split('-').map(Number)
+  const days = new Date(y, m, 0).getDate()
+  const elapsed = Number(today.slice(8))
+  const active = data.recurring.filter(r => r.active)
+  const fixedCats = new Set(active.map(r => r.categoryId))
+
+  const totals = monthTotals(data.txs, month)
+  let variable = 0
+  let fixedPaid = 0
+  for (const t of data.txs) {
+    if (monthOf(t.date) !== month) continue
+    if (t.type === 'expense') {
+      if (t.categoryId != null && fixedCats.has(t.categoryId)) fixedPaid += t.rub
+      else variable += t.rub
+    } else if (t.type === 'transfer') variable += fxLoss(t)
+  }
+  const fixedLeft = active.filter(r => !isPaid(r, data.txs, month, rubOf)).reduce((s, r) => s + rubOf(r), 0)
+
+  // Темп переменных трат: в начале месяца данных мало, поэтому опираемся на средний дневной темп
+  // прошлых 3 месяцев (как на 7 «виртуальных» дней) и по мере накопления дней переходим на текущий.
+  const prevDaily: number[] = []
+  for (let i = 1; i <= 3; i++) {
+    const pm = shiftMonth(month, -i)
+    if (!data.txs.some(t => monthOf(t.date) === pm)) continue
+    const [py, pmm] = pm.split('-').map(Number)
+    let v = 0
+    for (const t of data.txs) {
+      if (monthOf(t.date) !== pm) continue
+      if (t.type === 'expense' && !(t.categoryId != null && fixedCats.has(t.categoryId))) v += t.rub
+      else if (t.type === 'transfer') v += fxLoss(t)
+    }
+    prevDaily.push(v / new Date(py, pmm, 0).getDate())
+  }
+  const K = 7
+  const current = elapsed > 0 ? variable / elapsed : 0
+  const prior = prevDaily.length ? prevDaily.reduce((a, b) => a + b, 0) / prevDaily.length : current
+  const daily = (variable + prior * K) / (elapsed + K)
+  const variablePace = Math.round(variable + daily * (days - elapsed))
+  const expense = fixedPaid + fixedLeft + variablePace
+
+  const got = (k: string) => data.txs.some(t => t.type === 'income' && t.incomeKind === k && monthOf(t.date) === month)
+  const income = totals.income + (got('salary') ? 0 : settings.expectedSalary) + (got('advance') ? 0 : settings.expectedAdvance)
+  return { income, expense, balance: income - expense, fixedLeft, variablePace }
+}
+
+/** Капитал (₽) на конец каждого месяца: стартовые балансы рублёвых счетов + все движения до конца месяца. */
+export function capitalByMonth(accounts: Account[], txs: Tx[], months: string[], toRub: (minor: number, a: Account) => number): number[] {
+  const opening = accounts.reduce((s, a) => s + toRub(a.openingBalance, a), 0)
+  return months.map(m => opening + netChangeSince(txs.filter(t => monthOf(t.date) <= m), '0000-00-00'))
+}
+
+// ---------- Переводы по копилкам при распределении ----------
+
+export interface PlannedTransfer {
+  accountId: number
+  rub: number
+  reasons: string[]
+}
+
+/** Куда разложить поступление по счетам-копилкам: резервы под платежи и подсказки по целям. */
+export function transfersFor(d: Distribution, fromAccountId: number): PlannedTransfer[] {
+  const map = new Map<number, PlannedTransfer>()
+  const add = (accountId: number | null | undefined, rub: number, reason: string) => {
+    if (accountId == null || accountId === fromAccountId || rub <= 0) return
+    const cur = map.get(accountId) ?? { accountId, rub: 0, reasons: [] }
+    cur.rub += rub
+    cur.reasons.push(reason)
+    map.set(accountId, cur)
+  }
+  for (const r of d.reserves) add(r.recurring.reserveAccountId, r.rub, r.recurring.name)
+  for (const g of d.goalSuggestions) add(g.goal.accountId, g.rub, g.goal.name)
+  return [...map.values()]
+}

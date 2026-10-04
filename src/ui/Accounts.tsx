@@ -60,14 +60,18 @@ export function Accounts({ data }: { data: Data }) {
 function AccountSheet({ data, acc, onClose }: { data: Data; acc: Partial<Account>; onClose: () => void }) {
   const [name, setName] = useState(acc.name ?? '')
   const [currency, setCurrency] = useState<Currency>(acc.currency ?? 'RUB')
-  const [opening, setOpening] = useState(toInput(acc.openingBalance))
+  // Вводится текущий баланс; начальный подбирается так, чтобы с учётом всех операций получилось именно это.
+  const current = acc.id != null ? data.bal.get(acc.id) ?? 0 : 0
+  const [now, setNow] = useState(current > 0 ? toInput(current) : '')
   const [isDefault, setIsDefault] = useState(acc.id != null && acc.id === data.settings.defaultAccountId)
   const used = acc.id != null && data.txs.some(t => t.accountId === acc.id || t.toAccountId === acc.id)
 
   const save = useOnce(async () => {
     if (!name.trim()) return
     const id = await db.accounts.put({
-      ...(acc as Account), name: name.trim(), currency, openingBalance: fromInput(opening) ?? 0,
+      ...(acc as Account), name: name.trim(), currency, openingBalance: fromInput(now) == null && current !== 0
+        ? acc.openingBalance ?? 0 // поле очистили при отрицательном балансе — ничего не меняем
+        : (acc.openingBalance ?? 0) + ((fromInput(now) ?? 0) - current),
       archived: acc.archived ?? false, order: acc.order ?? data.accounts.length,
     })
     if (isDefault) await saveSettings({ defaultAccountId: id })
@@ -85,9 +89,12 @@ function AccountSheet({ data, acc, onClose }: { data: Data; acc: Partial<Account
       <input value={name} onChange={e => setName(e.target.value)} placeholder="Т-Банк, Наличные, Накопительный…" autoFocus={!acc.id} />
       <label className="field-label">Валюта</label>
       {used ? <div>{currency}</div> : <Chips options={CURRENCIES.map(c => ({ value: c, label: c }))} value={currency} onChange={setCurrency} />}
-      <label className="field-label">Начальный баланс</label>
-      <AmountInput value={opening} onChange={setOpening} suffix={CUR_SUFFIX[currency]} />
-      <p className="hint">Сколько было на счёте на момент начала учёта.</p>
+      <label className="field-label">Сейчас на счёте</label>
+      <AmountInput value={now} onChange={setNow} suffix={CUR_SUFFIX[currency]} />
+      <p className="hint">
+        {acc.id ? 'Если не совпадает с банком — введи реальную сумму, история операций не изменится.' : 'Сколько на счёте прямо сейчас.'}
+        {current < 0 && <> Сейчас по операциям: <Money v={current} cur={currency} />.</>}
+      </p>
       <label className="check"><input type="checkbox" checked={isDefault} onChange={e => setIsDefault(e.target.checked)} /> Основной счёт для ввода</label>
       <button className="save" onClick={save}>Сохранить</button>
       {acc.id && <button className="danger" onClick={archive}>Скрыть счёт</button>}

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { db } from '../db'
-import { bucketStates, envelopes, planIncome } from '../domain/calc'
+import { bucketStates, envelopes, isPaid, planIncome } from '../domain/calc'
 import { formatMoney, monthLabel, monthOf, shiftMonth, todayISO } from '../domain/money'
 import { BUCKET_LABEL, BUCKETS, INCOME_LABEL, type Category, type Recurring, type Tx } from '../domain/types'
 import { AmountInput, Bar, fromInput, Money, MonthNav, Sheet, toInput, useOnce } from './common'
@@ -21,7 +21,7 @@ export function Budget({ data, onDistribute }: { data: Data; onDistribute: (t: T
   const allocated = new Set(data.allocations.map(a => a.txId))
   const pending = data.txs.filter(t => t.type === 'income' && monthOf(t.date) === month && !allocated.has(t.id!))
   const noExpected = !data.settings.expectedSalary && !data.settings.expectedAdvance
-  const paid = (r: Recurring) => data.txs.some(t => t.type === 'expense' && monthOf(t.date) === month && t.categoryId === r.categoryId && t.comment === r.name)
+  const paid = (r: Recurring) => isPaid(r, data.txs, month, x => data.toRub(x.amount, x.currency) ?? x.amount)
   // С лимитом — сверху, по доле израсходованного; без лимита — ниже, по сумме трат.
   const sorted = [...envs].sort((a, b) => {
     const la = a.limit + Math.max(0, a.carry), lb = b.limit + Math.max(0, b.carry)
@@ -115,7 +115,10 @@ export function Budget({ data, onDistribute }: { data: Data; onDistribute: (t: T
               <Badge icon={categoryIcon(data.categories.find(c => c.id === r.categoryId))} tone="needs" />
               <div className="body">
                 <div className="title">{r.name} · {r.day}-го</div>
-                <div className="sub">резерв из {r.fundFrom === 'salary' ? `зарплаты ${data.settings.salaryDay}-го` : `аванса ${data.settings.advanceDay}-го`}</div>
+                <div className="sub">
+                  из {r.fundFrom === 'salary' ? `зарплаты ${data.settings.salaryDay}-го` : `аванса ${data.settings.advanceDay}-го`}
+                  {r.reserveAccountId != null && ` → ${data.accounts.find(a => a.id === r.reserveAccountId)?.name ?? ''}`}
+                </div>
               </div>
               <div className="amt">
                 <Money v={r.amount} cur={r.currency} />
@@ -156,7 +159,9 @@ function LimitSheet({ data, category, month, onClose }: { data: Data; category: 
 /** «Оплатил» по регулярному платежу — создаёт расход с его категорией. */
 function PaySheet({ data, r, onClose }: { data: Data; r: Recurring; onClose: () => void }) {
   const accounts = data.accounts.filter(a => !a.archived && a.currency === r.currency)
-  const [accountId, setAccountId] = useState(accounts.find(a => a.id === data.settings.defaultAccountId)?.id ?? accounts[0]?.id)
+  const [accountId, setAccountId] = useState(
+    accounts.find(a => a.id === r.reserveAccountId)?.id ?? accounts.find(a => a.id === data.settings.defaultAccountId)?.id ?? accounts[0]?.id,
+  )
   const [value, setValue] = useState(toInput(r.amount))
   const save = useOnce(async () => {
     const amount = fromInput(value)

@@ -1,4 +1,4 @@
-import { bucketStates, monthAverage, monthTotals, netChangeSince, upcoming, type PlannedEvent } from '../domain/calc'
+import { bucketStates, monthAverage, monthForecast, monthTotals, netChangeSince, savingsRate, upcoming, type PlannedEvent } from '../domain/calc'
 import { formatMoney, monthOf, todayISO } from '../domain/money'
 import { BUCKET_LABEL, BUCKETS, INCOME_LABEL, type Tx } from '../domain/types'
 import { Bar, Money, setAmountsHidden, useAmountsHidden } from './common'
@@ -35,6 +35,9 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
   const allocated = new Set(data.allocations.map(a => a.txId))
   const pending = data.txs.filter(t => t.type === 'income' && monthOf(t.date) === month && !allocated.has(t.id!))
   const exportStale = data.txs.length > 0 && (!data.settings.lastExportAt || Date.now() - data.settings.lastExportAt > 7 * 864e5)
+  const forecast = monthForecast(data, data.settings, today, r => data.toRub(r.amount, r.currency) ?? r.amount)
+  const rate = savingsRate({ income: forecast.income, expense: forecast.expense })
+  const overspent = totals.expense - totals.income
   const recent = [...data.txs].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt).slice(0, 4)
 
   return (
@@ -87,6 +90,35 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
           </div>
         </div>
       </div>
+
+      {(totals.income > 0 || totals.expense > 0) && (
+        <div className={`card ${forecast.balance < 0 ? 'alert-card' : ''}`}>
+          <div className="line" style={{ paddingTop: 0 }}>
+            <h3>Прогноз месяца</h3>
+            {rate != null && <span className={`pill ${rate < 0 ? 'neg' : rate < 0.1 ? 'warn-t' : 'pos'}`}>сбережения ≈ {Math.round(rate * 100)}%</span>}
+          </div>
+          {forecast.balance < 0 ? (
+            <div className="line" style={{ alignItems: 'flex-start' }}>
+              <span className="neg" style={{ display: 'flex', gap: 8 }}><Icon name="alert" size={20} /> При таком темпе месяц закончится в минусе</span>
+              <strong className="neg num"><Money v={forecast.balance} round /></strong>
+            </div>
+          ) : (
+            <div className="line"><span>К концу месяца останется</span><strong className="pos num"><Money v={forecast.balance} round /></strong></div>
+          )}
+          <div className="muted small">
+            доходы ≈ <Money v={forecast.income} round /> · расходы ≈ <Money v={forecast.expense} round />
+            {forecast.fixedLeft > 0 && <> · ещё платежей <Money v={forecast.fixedLeft} round /></>}
+          </div>
+          {overspent > 0 && (
+            <p className="warn">Расходы уже больше доходов месяца на <Money v={overspent} round /></p>
+          )}
+          {forecast.balance < 0 && !hidden && (
+            <p className="hint" style={{ marginBottom: 0 }}>
+              Чтобы выйти в ноль, переменные траты за месяц (без регулярных платежей) должны уложиться в ≈ {formatMoney(Math.max(0, Math.round((forecast.variablePace + forecast.balance) / 100) * 100))} — сейчас темп ≈ {formatMoney(Math.round(forecast.variablePace / 100) * 100)}.
+            </p>
+          )}
+        </div>
+      )}
 
       <button className="card" style={{ display: 'block', width: '100%' }} onClick={onOpenBudget}>
         <div className="line" style={{ paddingTop: 0 }}>

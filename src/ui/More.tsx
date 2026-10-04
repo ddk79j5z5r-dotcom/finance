@@ -6,8 +6,9 @@ import { disableLock, enrollFaceId, faceIdSupported, getLock, isLockEnabled, set
 import { AmountInput, Chips, CUR_SUFFIX, fromInput, Money, Sheet, toInput, useOnce } from './common'
 import { childrenOf, rateHint, rootCategories, type Data } from './data'
 import { Icon, type IconName } from './icons'
+import { ImportCk } from './ImportCk'
 
-export type MoreSection = 'rule' | 'pay' | 'categories' | 'recurring' | 'security' | 'backup' | 'reminders'
+export type MoreSection = 'rule' | 'pay' | 'categories' | 'recurring' | 'security' | 'backup' | 'reminders' | 'coinkeeper'
 export type MorePage = 'calendar' | 'analytics' | 'accounts'
 
 const PAGES: { id: MorePage; label: string; sub: string; icon: IconName }[] = [
@@ -18,6 +19,7 @@ const PAGES: { id: MorePage; label: string; sub: string; icon: IconName }[] = [
 
 const SECTIONS: { id: MoreSection; label: string; icon: IconName }[] = [
   { id: 'backup', label: 'Бэкап и Excel', icon: 'download' },
+  { id: 'coinkeeper', label: 'Импорт из CoinKeeper', icon: 'upload' },
   { id: 'pay', label: 'Выплаты', icon: 'banknote' },
   { id: 'rule', label: 'Правило распределения', icon: 'sliders' },
   { id: 'recurring', label: 'Регулярные платежи', icon: 'repeat' },
@@ -78,6 +80,7 @@ export function More({ data, section, setSection, onOpenPage }: {
           {section === 'security' && <SecuritySection />}
           {section === 'backup' && <BackupSection data={data} />}
           {section === 'reminders' && <RemindersSection />}
+          {section === 'coinkeeper' && <ImportCk data={data} onDone={() => setSection(null)} />}
         </Sheet>
       )}
     </div>
@@ -220,13 +223,14 @@ function RecurringForm({ data, r, onDone }: { data: Data; r: Partial<Recurring>;
   const [categoryId, setCategoryId] = useState<number | undefined>(r.categoryId)
   const [fundFrom, setFundFrom] = useState(r.fundFrom ?? 'salary')
   const [active, setActive] = useState(r.active ?? true)
+  const [reserveAccountId, setReserveAccountId] = useState<number | null>(r.reserveAccountId ?? null)
   const cats = data.categories.filter(c => !c.archived && !c.system)
   const label = (c: Category) => (c.parentId != null ? `${data.categories.find(p => p.id === c.parentId)?.name} · ${c.name}` : c.name)
 
   const save = useOnce(async () => {
     const a = fromInput(amount)
     if (!name.trim() || !a || categoryId == null) return
-    await db.recurring.put({ ...(r as Recurring), name: name.trim(), amount: a, currency, day: Math.min(31, Math.max(1, Number(day) || 1)), categoryId, fundFrom, active })
+    await db.recurring.put({ ...(r as Recurring), name: name.trim(), amount: a, currency, day: Math.min(31, Math.max(1, Number(day) || 1)), categoryId, fundFrom, reserveAccountId, active })
     onDone()
   })
   return (
@@ -245,6 +249,12 @@ function RecurringForm({ data, r, onDone }: { data: Data; r: Partial<Recurring>;
       </select>
       <label className="field-label">Резервировать из</label>
       <Chips options={[{ value: 'salary' as const, label: `Зарплаты (${data.settings.salaryDay}-го)` }, { value: 'advance' as const, label: `Аванса (${data.settings.advanceDay}-го)` }]} value={fundFrom} onChange={setFundFrom} />
+      <label className="field-label">Копилка для этого платежа</label>
+      <select value={reserveAccountId ?? ''} onChange={e => setReserveAccountId(e.target.value ? Number(e.target.value) : null)}>
+        <option value="">Нет — деньги остаются на основном счёте</option>
+        {data.accounts.filter(a => !a.archived && a.currency === currency).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+      </select>
+      <p className="hint">Например, «Квартира» для аренды. При распределении зарплаты приложение предложит перевести резерв на этот счёт, а «Оплатил» спишет платёж с него.</p>
       <label className="check"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} /> Активен</label>
       <button className="save" onClick={save}>Сохранить</button>
       {r.id && <button className="danger" onClick={async () => { if (confirm('Удалить платёж?')) { await db.recurring.delete(r.id!); onDone() } }}>Удалить</button>}

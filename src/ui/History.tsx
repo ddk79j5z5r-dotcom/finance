@@ -65,7 +65,10 @@ export function History({ data }: { data: Data }) {
       {shown.length === 0 && <p className="hint">{data.txs.length ? 'Ничего не найдено.' : 'Пока пусто — нажми «+» внизу, чтобы записать первую операцию.'}</p>}
       {[...byDay].map(([day, list]) => (
         <div key={day}>
-          <div className="day">{dayTitle(day)}</div>
+          <div className="day line" style={{ padding: 0 }}>
+            <span>{dayTitle(day)}</span>
+            {(() => { const spent = list.filter(t => t.type === 'expense').reduce((a, t) => a + t.rub, 0); return spent > 0 ? <span className="muted num">−<Money v={spent} /></span> : null })()}
+          </div>
           <div className="card tight">
             {list.map(t => {
               const v = txView(data, t)

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { incomeByKind, monthTotals, spendByRoot } from '../domain/calc'
+import { capitalByMonth, incomeByKind, monthTotals, savingsRate, spendByRoot } from '../domain/calc'
 import { formatMoney, monthLabel, monthOf, shiftMonth, todayISO } from '../domain/money'
 import { INCOME_LABEL } from '../domain/types'
 import { Money, MonthNav, Segmented, useAmountsHidden } from './common'
@@ -33,11 +33,11 @@ export function Analytics({ data }: { data: Data }) {
   const focus = slices.find(s => s.key === active)
 
   const barCount = period === 'year' ? 12 : 6
-  const bars = Array.from({ length: barCount }, (_, i) => {
-    const m = shiftMonth(month, i - barCount + 1)
-    const t = monthTotals(data.txs, m)
-    return { month: m, rub: mode === 'expense' ? t.expense : t.income }
-  })
+
+  const pairMonths = Array.from({ length: barCount }, (_, i) => shiftMonth(month, i - barCount + 1))
+  const pairs = pairMonths.map(m => ({ month: m, ...monthTotals(data.txs, m) }))
+  const sel = pairs.find(p => p.month === month)
+  const capital = capitalByMonth(data.accounts, data.txs, pairMonths, (v, a) => data.toRub(v, a.currency) ?? 0)
 
   const periodLabel = period === 'month' ? monthLabel(month) : `${monthLabel(from)} — ${monthLabel(month)}`
 
@@ -89,8 +89,30 @@ export function Analytics({ data }: { data: Data }) {
       )}
 
       <div className="card bars">
-        <h3 style={{ marginBottom: 8 }}>{mode === 'expense' ? 'Расходы по месяцам' : 'Доходы по месяцам'}</h3>
-        <Bars bars={bars} selected={month} onSelect={setMonth} hidden={hidden} />
+        <div className="line" style={{ paddingTop: 0 }}>
+          <h3>Доходы и расходы</h3>
+          {(() => { const r = savingsRate(monthTotals(data.txs, month)); return r == null ? null : <span className={`pill ${r < 0 ? 'neg' : r < 0.1 ? 'warn-t' : 'pos'}`}>сбережения {Math.round(r * 100)}%</span> })()}
+        </div>
+        <div className="legend" style={{ margin: '0 0 8px' }}>
+          <span><i style={{ background: 'var(--s1)' }} />доходы</span>
+          <span><i style={{ background: 'var(--s2)' }} />расходы</span>
+        </div>
+        <PairBars bars={pairs} selected={month} onSelect={setMonth} hidden={hidden} />
+        {!hidden && sel && (
+          <div className="line small">
+            <span className="muted">{monthLabel(month)}</span>
+            <span className="num">+{compact(sel.income)} · −{compact(sel.expense)} = <strong className={sel.income - sel.expense < 0 ? 'neg' : 'pos'}>{sel.income - sel.expense < 0 ? '−' : '+'}{compact(Math.abs(sel.income - sel.expense))}</strong></span>
+          </div>
+        )}
+      </div>
+
+      <div className="card bars">
+        <div className="line" style={{ paddingTop: 0 }}>
+          <h3>Капитал</h3>
+          {!hidden && <span className="num"><Money v={capital.at(-1) ?? 0} round /></span>}
+        </div>
+        <p className="muted small" style={{ margin: '0 0 6px' }}>сумма на всех счетах на конец месяца</p>
+        <LineChart months={pairMonths} values={capital} selected={month} onSelect={setMonth} hidden={hidden} />
       </div>
     </div>
   )
@@ -124,41 +146,6 @@ function Donut({ slices, total, active, onSelect, children }: {
   )
 }
 
-function Bars({ bars, selected, onSelect, hidden }: {
-  bars: { month: string; rub: number }[]; selected: string; onSelect: (m: string) => void; hidden: boolean
-}) {
-  const W = 320, H = 150, top = 22, bottom = 22
-  const max = Math.max(1, ...bars.map(b => b.rub))
-  const slot = W / bars.length
-  const bw = Math.min(28, slot * 0.55)
-  const y = (v: number) => top + (H - top - bottom) * (1 - v / max)
-  const sel = bars.find(b => b.month === selected)
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Суммы по месяцам">
-      <line className="grid" x1="0" x2={W} y1={H - bottom} y2={H - bottom} />
-      {bars.map((b, i) => {
-        const x = i * slot + (slot - bw) / 2
-        const h = Math.max(b.rub > 0 ? 3 : 0, H - bottom - y(b.rub))
-        const isSel = b.month === selected
-        const m = Number(b.month.slice(5)) - 1
-        return (
-          <g key={b.month} onClick={() => onSelect(b.month)} style={{ cursor: 'pointer' }}>
-            <rect x={i * slot} y={0} width={slot} height={H} fill="transparent" />
-            <path d={roundedTop(x, H - bottom - h, bw, h, Math.min(4, h))} fill="var(--s1)" opacity={isSel ? 1 : 0.45} />
-            <text x={x + bw / 2} y={H - 6} textAnchor="middle" fontWeight={isSel ? 700 : 400}>{SHORT_MONTHS[m]}</text>
-            <title>{`${monthLabel(b.month)}: ${formatMoney(b.rub)}`}</title>
-          </g>
-        )
-      })}
-      {sel && !hidden && sel.rub > 0 && (() => {
-        const i = bars.indexOf(sel)
-        const cx = Math.min(W - 30, Math.max(30, i * slot + slot / 2))
-        return <text className="bar-val" x={cx} y={Math.max(12, y(sel.rub) - 6)} textAnchor="middle">{compact(sel.rub)}</text>
-      })()}
-    </svg>
-  )
-}
-
 /** Столбец со скруглением только сверху; основание прямое, на оси. */
 function roundedTop(x: number, y: number, w: number, h: number, r: number) {
   if (h <= 0) return ''
@@ -170,4 +157,63 @@ function compact(minor: number) {
   if (rub >= 1_000_000) return `${(rub / 1_000_000).toFixed(1).replace('.', ',')} млн ₽`
   if (rub >= 10_000) return `${Math.round(rub / 1000)} тыс ₽`
   return formatMoney(Math.round(minor / 100) * 100)
+}
+
+function PairBars({ bars, selected, onSelect, hidden }: {
+  bars: { month: string; income: number; expense: number }[]; selected: string; onSelect: (m: string) => void; hidden: boolean
+}) {
+  const W = 320, H = 150, top = 10, bottom = 22
+  const max = Math.max(1, ...bars.flatMap(b => [b.income, b.expense]))
+  const slot = W / bars.length
+  const bw = Math.min(13, slot * 0.3)
+  const h = (v: number) => (H - top - bottom) * (v / max)
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Доходы и расходы по месяцам">
+      <line className="grid" x1="0" x2={W} y1={H - bottom} y2={H - bottom} />
+      {bars.map((b, i) => {
+        const cx = i * slot + slot / 2
+        const isSel = b.month === selected
+        const m = Number(b.month.slice(5)) - 1
+        const hi = h(b.income), he = h(b.expense)
+        return (
+          <g key={b.month} onClick={() => onSelect(b.month)} style={{ cursor: 'pointer' }} opacity={isSel ? 1 : 0.5}>
+            <rect x={i * slot} y={0} width={slot} height={H} fill="transparent" />
+            <path d={roundedTop(cx - bw - 1, H - bottom - hi, bw, hi, Math.min(3, hi))} fill="var(--s1)" />
+            <path d={roundedTop(cx + 1, H - bottom - he, bw, he, Math.min(3, he))} fill="var(--s2)" />
+            <text x={cx} y={H - 6} textAnchor="middle" fontWeight={isSel ? 700 : 400}>{SHORT_MONTHS[m]}</text>
+            <title>{`${monthLabel(b.month)}: доходы ${hidden ? '••••' : formatMoney(b.income)}, расходы ${hidden ? '••••' : formatMoney(b.expense)}`}</title>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+function LineChart({ months, values, selected, onSelect, hidden }: {
+  months: string[]; values: number[]; selected: string; onSelect: (m: string) => void; hidden: boolean
+}) {
+  const W = 320, H = 140, top = 22, bottom = 22, pad = 14
+  const min = Math.min(0, ...values), max = Math.max(1, ...values)
+  const x = (i: number) => pad + (i * (W - 2 * pad)) / Math.max(1, months.length - 1)
+  const y = (v: number) => top + (H - top - bottom) * (1 - (v - min) / (max - min || 1))
+  const d = values.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('')
+  const si = months.indexOf(selected)
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Капитал по месяцам">
+      <line className="grid" x1="0" x2={W} y1={H - bottom} y2={H - bottom} />
+      {min < 0 && <line className="grid" x1="0" x2={W} y1={y(0)} y2={y(0)} strokeDasharray="3 3" />}
+      <path d={d} fill="none" stroke="var(--s3)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      {months.map((m, i) => (
+        <g key={m} onClick={() => onSelect(m)} style={{ cursor: 'pointer' }}>
+          <rect x={x(i) - (W / months.length) / 2} y={0} width={W / months.length} height={H} fill="transparent" />
+          <circle cx={x(i)} cy={y(values[i])} r={i === si ? 5 : 3} fill={i === si ? 'var(--s3)' : 'var(--card)'} stroke="var(--s3)" strokeWidth="2" />
+          <text x={x(i)} y={H - 6} textAnchor="middle" fontWeight={i === si ? 700 : 400}>{SHORT_MONTHS[Number(m.slice(5)) - 1]}</text>
+          <title>{`${monthLabel(m)}: ${hidden ? '••••' : formatMoney(values[i])}`}</title>
+        </g>
+      ))}
+      {si >= 0 && !hidden && (
+        <text className="bar-val" x={Math.min(W - 34, Math.max(34, x(si)))} y={Math.max(12, y(values[si]) - 10)} textAnchor="middle">{compact(values[si])}</text>
+      )}
+    </svg>
+  )
 }

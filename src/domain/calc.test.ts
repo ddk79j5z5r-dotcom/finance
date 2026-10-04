@@ -207,3 +207,71 @@ describe('главная и календарь', () => {
     expect(spendByRoot(cats, txs, '2026-08', '2026-09').map(x => [x.category.name, x.rub])).toEqual([['Жильё', R(30000)], ['Кафе', R(25000)]])
   })
 })
+
+import { capitalByMonth, isPaid, monthForecast, savingsRate, transfersFor } from './calc'
+
+describe('прогноз и копилки', () => {
+  const rent: Recurring = { id: 1, name: 'Аренда', amount: R(30000), currency: 'RUB', day: 1, categoryId: 2, fundFrom: 'salary', reserveAccountId: 7, active: true }
+  const loan: Recurring = { id: 2, name: 'Кредит', amount: R(15300), currency: 'RUB', day: 29, categoryId: 4, fundFrom: 'advance', reserveAccountId: 8, active: true }
+  const settings = { ...DEFAULT_SETTINGS, expectedSalary: R(55000), expectedAdvance: R(25000) }
+
+  it('норма сбережений', () => {
+    expect(savingsRate({ income: R(100), expense: R(80) })).toBeCloseTo(0.2)
+    expect(savingsRate({ income: 0, expense: R(5) })).toBeNull()
+  })
+
+  it('платёж считается оплаченным по категории и сумме ±10%', () => {
+    const txs = [tx({ date: '2026-10-01', categoryId: 2, amount: R(28000), rub: R(28000) })]
+    expect(isPaid(rent, txs, '2026-10')).toBe(true)
+    expect(isPaid(rent, txs, '2026-11')).toBe(false)
+    expect(isPaid(loan, txs, '2026-10')).toBe(false)
+  })
+
+  it('прогноз: фиксированные по плану, переменные по темпу, ожидаемая зарплата', () => {
+    const txs = [
+      tx({ date: '2026-10-01', categoryId: 2, amount: R(30000), rub: R(30000) }), // аренда оплачена
+      tx({ date: '2026-10-05', categoryId: 3, amount: R(10000), rub: R(10000) }), // переменные: 10 000 за 10 дней
+    ]
+    const f = monthForecast({ txs, recurring: [rent, loan] }, settings, '2026-10-10')
+    expect(f.fixedLeft).toBe(R(15300))
+    expect(f.variablePace).toBe(R(31000)) // 10 000 / 10 × 31
+    expect(f.expense).toBe(R(30000 + 15300 + 31000))
+    expect(f.income).toBe(R(80000))
+    expect(f.balance).toBe(R(80000 - 76300))
+  })
+
+  it('в начале месяца прогноз опирается на темп прошлых месяцев', () => {
+    const txs = [
+      tx({ date: '2026-09-10', categoryId: 3, amount: R(30000), rub: R(30000) }), // сентябрь: 1 000 в день
+      tx({ date: '2026-10-01', categoryId: 3, amount: R(100), rub: R(100) }), // 2 октября: почти ничего
+    ]
+    const f = monthForecast({ txs, recurring: [] }, DEFAULT_SETTINGS, '2026-10-02')
+    // темп ≈ (100 + 1000×7) / 9 ≈ 789 в день на оставшиеся 29 дней
+    expect(f.variablePace).toBe(Math.round(R(100) + ((R(100) + R(1000) * 7) / 9) * 29))
+    expect(f.variablePace).toBeGreaterThan(R(20000))
+  })
+
+  it('переводы по копилкам: резервы на счета платежей, сбережения на счета целей', () => {
+    const d = {
+      income: R(55000),
+      reserves: [{ recurring: rent, rub: R(30000) }, { recurring: { ...rent, id: 3, name: 'ЖКХ', reserveAccountId: 7 }, rub: R(5000) }],
+      split: { needs: R(5000), wants: R(10000), savings: R(5000) },
+      goalSuggestions: [{ goal: { id: 1, name: 'Подушка', target: R(1), accountId: 9, priority: 0 }, rub: R(5000) }],
+    }
+    expect(transfersFor(d, 1)).toEqual([
+      { accountId: 7, rub: R(35000), reasons: ['Аренда', 'ЖКХ'] },
+      { accountId: 9, rub: R(5000), reasons: ['Подушка'] },
+    ])
+    // Резерв на тот же счёт, куда пришли деньги, переводить не нужно.
+    expect(transfersFor(d, 7).map(t => t.accountId)).toEqual([9])
+  })
+
+  it('капитал на конец месяцев', () => {
+    const accounts = [{ id: 1, name: 'К', currency: 'RUB' as const, openingBalance: R(1000), archived: false, order: 0 }]
+    const txs = [
+      tx({ date: '2026-08-13', type: 'income', incomeKind: 'salary', amount: R(500), rub: R(500) }),
+      tx({ date: '2026-09-02', categoryId: 3, amount: R(700), rub: R(700) }),
+    ]
+    expect(capitalByMonth(accounts, txs, ['2026-07', '2026-08', '2026-09'], m => m)).toEqual([R(1000), R(1500), R(800)])
+  })
+})

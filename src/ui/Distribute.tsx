@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { db } from '../db'
-import { allocationOf, suggestDistribution } from '../domain/calc'
-import { formatMoney, monthOf } from '../domain/money'
+import { allocationOf, suggestDistribution, suggestGoals, transfersFor } from '../domain/calc'
+import { formatMoney, monthOf, todayISO } from '../domain/money'
 import { BUCKET_LABEL, BUCKETS, INCOME_LABEL, REGULAR_INCOME, type Bucket, type Tx } from '../domain/types'
 import { AmountInput, fromInput, Money, Sheet, toInput, useOnce } from './common'
 import type { Data } from './data'
@@ -24,10 +24,24 @@ export function Distribute({ data, tx, onClose }: { data: Data; tx: Tx; onClose:
   const rest = d.income - reserved - parsed.needs - parsed.wants - parsed.savings
   const kind = tx.incomeKind!
   const acc = data.accounts.find(a => a.id === tx.accountId)
+  // Цели пересчитываются, если сумму сбережений поправили вручную.
+  const goals = suggestGoals(parsed.savings, data.goals, data.goalRemainingRub)
+  const transfers = transfersFor({ ...d, goalSuggestions: goals }, tx.accountId)
+    .filter(t => data.accounts.find(a => a.id === t.accountId)?.currency === acc?.currency)
+  const [makeTransfers, setMakeTransfers] = useState(true)
 
   const accept = useOnce(async () => {
-    await db.allocations.where('txId').equals(tx.id!).delete()
-    await db.allocations.add({ txId: tx.id!, month: monthOf(tx.date), ...allocationOf(d, parsed) })
+    await db.transaction('rw', db.allocations, db.txs, async () => {
+      await db.allocations.where('txId').equals(tx.id!).delete()
+      await db.allocations.add({ txId: tx.id!, month: monthOf(tx.date), ...allocationOf(d, parsed) })
+      if (makeTransfers && transfers.length) {
+        const date = todayISO() < tx.date ? tx.date : todayISO()
+        await db.txs.bulkAdd(transfers.map((t, i) => ({
+          date, type: 'transfer' as const, accountId: tx.accountId, toAccountId: t.accountId,
+          amount: t.rub, rub: t.rub, toAmount: t.rub, toRub: t.rub, comment: t.reasons.join(', '), createdAt: Date.now() + i,
+        })))
+      }
+    })
     onClose()
   })
 
@@ -67,20 +81,26 @@ export function Distribute({ data, tx, onClose }: { data: Data; tx: Tx; onClose:
         )}
       </div>
 
-      {d.goalSuggestions.length > 0 && (
+      {transfers.length > 0 ? (
         <div className="card">
-          <h3>Сбережения — куда</h3>
-          {d.goalSuggestions.map(s => (
-            <div className="line" key={s.goal.id}>
-              <span>{s.goal.name} <span className="muted">→ {data.accounts.find(a => a.id === s.goal.accountId)?.name}</span></span>
-              <Money v={s.rub} />
+          <h3>Разложить по копилкам</h3>
+          {transfers.map(t => (
+            <div className="line" key={t.accountId}>
+              <span>→ {data.accounts.find(a => a.id === t.accountId)?.name} <div className="muted small">{t.reasons.join(', ')}</div></span>
+              <Money v={t.rub} />
             </div>
           ))}
-          <p className="hint">Переведи на эти счета — прогресс целей считается по реальному балансу.</p>
+          <label className="check">
+            <input type="checkbox" checked={makeTransfers} onChange={e => setMakeTransfers(e.target.checked)} />
+            Записать эти переводы с «{acc?.name}»
+          </label>
+          <p className="hint">Сами деньги переведи в банке — приложение только запишет переводы, чтобы балансы совпадали.</p>
         </div>
-      )}
+      ) : goals.length > 0 || d.reserves.length > 0 ? (
+        <p className="hint">Совет: укажи копилку у регулярных платежей («Ещё → Регулярные платежи»), и приложение будет само раскладывать резервы по счетам.</p>
+      ) : null}
 
-      <button className="save" onClick={accept}>Принять</button>
+      <button className="save" onClick={accept}>{makeTransfers && transfers.length ? `Принять и записать переводы (${transfers.length})` : 'Принять'}</button>
     </Sheet>
   )
 }

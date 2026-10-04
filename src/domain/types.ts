@@ -6,7 +6,7 @@ export type Bucket = 'needs' | 'wants' | 'savings'
 export const BUCKETS: Bucket[] = ['needs', 'wants', 'savings']
 
 /** Регулярный доход (salary, advance, bonus) идёт в базу правила; нерегулярный (gift, other) — нет. */
-export type IncomeKind = 'salary' | 'advance' | 'bonus' | 'gift' | 'other'
+export type IncomeKind = 'salary' | 'advance' | 'bonus' | 'interest' | 'gift' | 'other'
 export const REGULAR_INCOME: IncomeKind[] = ['salary', 'advance', 'bonus']
 
 export type TxType = 'expense' | 'income' | 'transfer'
@@ -64,6 +64,8 @@ export interface Recurring {
   day: number
   categoryId: number
   fundFrom: 'salary' | 'advance'
+  /** Счёт-копилка, где копятся деньги на этот платёж (например, «Квартира»). */
+  reserveAccountId?: number | null
   active: boolean
 }
 
@@ -122,6 +124,7 @@ export const INCOME_LABEL: Record<IncomeKind, string> = {
   salary: 'Зарплата',
   advance: 'Аванс',
   bonus: 'Премия',
+  interest: 'Проценты',
   gift: 'От родителей',
   other: 'Другое',
 }
