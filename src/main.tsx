@@ -9,6 +9,12 @@ import './index.css'
 
 registerSW({ immediate: true })
 
+// Без зума щипком: Safari на iPhone игнорирует user-scalable=no, поэтому гасим жест вручную.
+for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(ev, e => e.preventDefault(), { passive: false })
+}
+document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault() }, { passive: false })
+
 // Просим браузер не вытеснять данные при нехватке места.
 navigator.storage?.persist?.()
 

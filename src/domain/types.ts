@@ -19,7 +19,11 @@ export interface Account {
   openingBalance: number
   archived: boolean
   order: number
+  /** Карта (с неё платим) или копилка (там лежат отложенные деньги). Не задано — угадывается по названию. */
+  kind?: AccountKind
 }
+
+export type AccountKind = 'card' | 'savings'
 
 export interface Category {
   id?: number

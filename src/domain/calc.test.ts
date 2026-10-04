@@ -291,3 +291,25 @@ describe('калькулятор суммы', () => {
     expect(hasOperator('300')).toBe(false)
   })
 })
+
+import { accountKind, accountsForEntry } from './calc'
+
+describe('порядок счетов при вводе', () => {
+  const acc = (id: number, name: string, order: number, kind?: 'card' | 'savings'): Account =>
+    ({ id, name, currency: 'RUB', openingBalance: 0, archived: false, order, kind })
+  const accounts = [acc(1, 'Aristo', 0), acc(2, 'Квартира', 1), acc(3, 'Подушка безопасности', 2), acc(4, 'Сбербанк', 3), acc(5, 'Тинькофф Банк', 4), acc(6, 'Наличка', 5)]
+
+  it('тип по названию, явный тип важнее', () => {
+    expect(accounts.map(accountKind)).toEqual(['savings', 'savings', 'savings', 'card', 'card', 'card'])
+    expect(accountKind(acc(9, 'Тинькофф Банк', 0, 'savings'))).toBe('savings')
+  })
+
+  it('карты первыми: основная, затем по частоте трат; потом копилки', () => {
+    const txs = [
+      tx({ date: '2026-10-01', accountId: 4 }), tx({ date: '2026-10-02', accountId: 6 }), tx({ date: '2026-10-03', accountId: 6 }),
+      tx({ date: '2026-10-03', accountId: 2 }), tx({ date: '2025-01-01', accountId: 1 }),
+    ]
+    expect(accountsForEntry(accounts, txs, 5, '2026-10-04').map(a => a.name))
+      .toEqual(['Тинькофф Банк', 'Наличка', 'Сбербанк', 'Квартира', 'Aristo', 'Подушка безопасности'])
+  })
+})

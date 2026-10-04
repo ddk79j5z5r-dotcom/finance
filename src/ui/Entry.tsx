@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { db } from '../db'
 import { amountToInput, evalAmount, formatMoney, hasOperator, todayISO } from '../domain/money'
 import { convertToRub, rateFor } from '../domain/rates'
-import { INCOME_LABEL, type IncomeKind, type Tx, type TxType } from '../domain/types'
+import { accountKind, accountsForEntry } from '../domain/calc'
+import { INCOME_LABEL, type Account, type IncomeKind, type Tx, type TxType } from '../domain/types'
 import { AmountInput, CUR_SUFFIX, fromInput, Segmented, toInput, useOnce } from './common'
 import { activeAccounts, childrenOf, rootCategories, type Data } from './data'
 import { categoryIcon, Icon, INCOME_ICON, type IconName } from './icons'
@@ -19,13 +20,16 @@ const yesterday = () => { const d = new Date(); d.setDate(d.getDate() - 1); retu
 
 /** Быстрый ввод операции; с `tx` — редактирование существующей. */
 export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx: Tx) => void }) {
-  const accounts = activeAccounts(data.accounts)
-  const defaultAcc = data.settings.defaultAccountId ?? accounts[0]?.id ?? null
+  const active = useMemo(() => activeAccounts(data.accounts), [data.accounts])
+  const defaultAcc = data.settings.defaultAccountId ?? null
   const initialCat = tx?.categoryId != null ? data.categories.find(c => c.id === tx.categoryId) : undefined
 
   const [type, setType] = useState<TxType>(tx?.type ?? 'expense')
+  // Карты — первыми (основная, затем частые), копилки — после. Для «Куда» в переводе — наоборот.
+  const accounts = useMemo(() => accountsForEntry(active, data.txs, defaultAcc, todayISO(), type), [active, data.txs, defaultAcc, type])
+  const toAccounts = useMemo(() => [...accounts].sort((a, b) => Number(accountKind(a) === 'card') - Number(accountKind(b) === 'card')), [accounts])
   const [expr, setExpr] = useState(tx ? amountToInput(tx.amount) : '')
-  const [accountId, setAccountId] = useState<number | null>(tx?.accountId ?? defaultAcc)
+  const [accountId, setAccountId] = useState<number | null>(tx?.accountId ?? defaultAcc ?? accounts[0]?.id ?? null)
   const [rootId, setRootId] = useState<number | null>(initialCat ? (initialCat.parentId ?? initialCat.id!) : null)
   const [subId, setSubId] = useState<number | null>(initialCat?.parentId != null ? initialCat.id! : null)
   const [kind, setKind] = useState<IncomeKind>(tx?.incomeKind ?? 'salary')
@@ -127,9 +131,9 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
     }
   })
 
-  const accRow = (value: number | null, onPick: (id: number) => void, exclude?: number | null) => (
+  const accRow = (list: Account[], value: number | null, onPick: (id: number) => void, exclude?: number | null) => (
     <div className="scroll-row">
-      {accounts.filter(a => a.id !== exclude).map(a => (
+      {list.filter(a => a.id !== exclude).map(a => (
         <button key={a.id} type="button" className={a.id === value ? 'chip on' : 'chip'} onClick={() => onPick(a.id!)}>
           <Icon name="wallet" size={16} />{a.name}{a.currency !== 'RUB' ? ` ${CUR_SUFFIX[a.currency]}` : ''}
         </button>
@@ -192,12 +196,12 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
       )}
 
       <label className="field-label">{type === 'transfer' ? 'Откуда' : type === 'income' ? 'На счёт' : 'Со счёта'}</label>
-      {accRow(accountId, setAccountId)}
+      {accRow(accounts, accountId, setAccountId)}
 
       {type === 'transfer' && (
         <>
           <label className="field-label">Куда</label>
-          {accRow(toAccountId, setToAccountId, accountId)}
+          {accRow(toAccounts, toAccountId, setToAccountId, accountId)}
           {isExchange && (
             <>
               <label className="field-label">Сколько пришло, {CUR_SUFFIX[toAcc!.currency]}</label>

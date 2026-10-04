@@ -1,5 +1,5 @@
 import { monthOf, shiftMonth } from './money'
-import type { Account, Allocation, Bucket, Category, Goal, IncomeKind, Limit, Recurring, Settings, Tx } from './types'
+import type { Account, AccountKind, Allocation, Bucket, Category, Goal, IncomeKind, Limit, Recurring, Settings, Tx } from './types'
 import { BUCKETS, REGULAR_INCOME } from './types'
 
 // ---------- Балансы ----------
@@ -472,4 +472,33 @@ export function transfersFor(d: Distribution, fromAccountId: number): PlannedTra
   for (const r of d.reserves) add(r.recurring.reserveAccountId, r.rub, r.recurring.name)
   for (const g of d.goalSuggestions) add(g.goal.accountId, g.rub, g.goal.name)
   return [...map.values()]
+}
+
+// ---------- Порядок счетов при вводе ----------
+
+const CARD_NAME = /банк|карт|сбер|тинькофф|т-банк|псб|альфа|втб|газпром|райф|озон|яндекс|мтс|налич|кошел|visa|mastercard/i
+
+export function accountKind(a: Account): AccountKind {
+  return a.kind ?? (CARD_NAME.test(a.name) ? 'card' : 'savings')
+}
+
+/**
+ * Счета для ввода операции: сначала карты, затем копилки. Внутри — основной счёт первым,
+ * дальше по частоте использования за 90 дней (как источник расхода/дохода), затем по порядку.
+ */
+export function accountsForEntry(accounts: Account[], txs: Tx[], defaultId: number | null, today: string, type: Tx['type'] = 'expense'): Account[] {
+  const since = new Date(today + 'T00:00:00')
+  since.setDate(since.getDate() - 90)
+  const from = since.toISOString().slice(0, 10)
+  const use = new Map<number, number>()
+  for (const t of txs) {
+    if (t.date < from) continue
+    if (type === 'transfer' ? t.type === 'transfer' : t.type === type) use.set(t.accountId, (use.get(t.accountId) ?? 0) + 1)
+  }
+  const rank = (a: Account) => (accountKind(a) === 'card' ? 0 : 1)
+  return [...accounts].sort((a, b) =>
+    rank(a) - rank(b) ||
+    Number(b.id === defaultId) - Number(a.id === defaultId) ||
+    (use.get(b.id!) ?? 0) - (use.get(a.id!) ?? 0) ||
+    a.order - b.order)
 }

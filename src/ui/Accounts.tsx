@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { db, saveSettings } from '../db'
-import { CURRENCIES, type Account, type Currency, type Goal } from '../domain/types'
+import { accountKind } from '../domain/calc'
+import { CURRENCIES, type Account, type AccountKind, type Currency, type Goal } from '../domain/types'
 import { AmountInput, Bar, Chips, CUR_SUFFIX, fromInput, Money, Sheet, toInput, useOnce } from './common'
 import { activeAccounts, rateHint, type Data } from './data'
 import { Icon } from './icons'
@@ -29,7 +30,7 @@ export function Accounts({ data }: { data: Data }) {
               <span className="badge" style={{ width: 40, height: 40, background: 'var(--accent-soft)', color: 'var(--accent)' }}><Icon name="wallet" size={20} /></span>
               <div className="body">
                 <div className="title">{a.name}</div>
-                <div className="sub">{a.currency}{a.id === data.settings.defaultAccountId ? ' · основной' : ''}</div>
+                <div className="sub">{accountKind(a) === 'card' ? 'Карта' : 'Копилка'}{a.currency !== 'RUB' ? ` · ${a.currency}` : ''}{a.id === data.settings.defaultAccountId ? ' · основной' : ''}</div>
               </div>
               <div className={`amt ${b < 0 ? 'neg' : ''}`}>
                 <Money v={b} cur={a.currency} />
@@ -64,6 +65,7 @@ function AccountSheet({ data, acc, onClose }: { data: Data; acc: Partial<Account
   const current = acc.id != null ? data.bal.get(acc.id) ?? 0 : 0
   const [now, setNow] = useState(current > 0 ? toInput(current) : '')
   const [isDefault, setIsDefault] = useState(acc.id != null && acc.id === data.settings.defaultAccountId)
+  const [kind, setKind] = useState<AccountKind>(acc.id != null ? accountKind(acc as Account) : 'card')
   const used = acc.id != null && data.txs.some(t => t.accountId === acc.id || t.toAccountId === acc.id)
 
   const save = useOnce(async () => {
@@ -72,7 +74,7 @@ function AccountSheet({ data, acc, onClose }: { data: Data; acc: Partial<Account
       ...(acc as Account), name: name.trim(), currency, openingBalance: fromInput(now) == null && current !== 0
         ? acc.openingBalance ?? 0 // поле очистили при отрицательном балансе — ничего не меняем
         : (acc.openingBalance ?? 0) + ((fromInput(now) ?? 0) - current),
-      archived: acc.archived ?? false, order: acc.order ?? data.accounts.length,
+      archived: acc.archived ?? false, order: acc.order ?? data.accounts.length, kind,
     })
     if (isDefault) await saveSettings({ defaultAccountId: id })
     onClose()
@@ -95,6 +97,9 @@ function AccountSheet({ data, acc, onClose }: { data: Data; acc: Partial<Account
         {acc.id ? 'Если не совпадает с банком — введи реальную сумму, история операций не изменится.' : 'Сколько на счёте прямо сейчас.'}
         {current < 0 && <> Сейчас по операциям: <Money v={current} cur={currency} />.</>}
       </p>
+      <label className="field-label">Тип</label>
+      <Chips options={[{ value: 'card' as const, label: 'Карта', icon: 'card' as const }, { value: 'savings' as const, label: 'Копилка', icon: 'target' as const }]} value={kind} onChange={setKind} />
+      <p className="hint">Карты показываются первыми при вводе трат, копилки — после.</p>
       <label className="check"><input type="checkbox" checked={isDefault} onChange={e => setIsDefault(e.target.checked)} /> Основной счёт для ввода</label>
       <button className="save" onClick={save}>Сохранить</button>
       {acc.id && <button className="danger" onClick={archive}>Скрыть счёт</button>}

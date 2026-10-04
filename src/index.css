@@ -60,6 +60,8 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; background: var(--bg); color: var(--text); }
+/* Без зума: двойное касание не увеличивает, касания срабатывают без задержки. */
+html { touch-action: manipulation; }
 body {
   font: 17px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
   -webkit-text-size-adjust: 100%;
