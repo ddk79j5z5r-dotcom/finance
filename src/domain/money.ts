@@ -56,3 +56,23 @@ export function dateLabel(date: string): string {
   const d = new Date(date + 'T00:00:00')
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' })
 }
+
+/**
+ * Сумма из выражения клавиатуры-калькулятора: «300+85−20,5» → 36450 (копейки).
+ * Висящий в конце оператор игнорируется. null — если выражение пустое или итог ≤ 0.
+ */
+export function evalAmount(expr: string): number | null {
+  const s = expr.replace(/[+−-]$/, '')
+  if (!s) return null
+  const parts = s.match(/[+−-]?[^+−-]+/g) ?? []
+  let total = 0
+  for (const p of parts) {
+    const sign = p[0] === '−' || p[0] === '-' ? -1 : 1
+    const v = parseAmount(p.replace(/^[+−-]/, ''))
+    if (v == null) return null
+    total += sign * v
+  }
+  return total > 0 ? total : null
+}
+
+export const hasOperator = (expr: string) => /[+−-]/.test(expr.replace(/^[+−-]/, ''))

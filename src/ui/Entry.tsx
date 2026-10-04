@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { db } from '../db'
-import { formatMoney, todayISO } from '../domain/money'
+import { amountToInput, evalAmount, formatMoney, hasOperator, todayISO } from '../domain/money'
 import { convertToRub, rateFor } from '../domain/rates'
 import { INCOME_LABEL, type IncomeKind, type Tx, type TxType } from '../domain/types'
-import { AmountInput, Chips, CUR_SUFFIX, fromInput, Segmented, toInput, useOnce } from './common'
-import { categoryIcon, INCOME_ICON } from './icons'
+import { AmountInput, CUR_SUFFIX, fromInput, Segmented, toInput, useOnce } from './common'
 import { activeAccounts, childrenOf, rootCategories, type Data } from './data'
+import { categoryIcon, Icon, INCOME_ICON, type IconName } from './icons'
+import { applyKey, Keypad } from './Keypad'
 
 const TYPES: { value: TxType; label: string }[] = [
   { value: 'expense', label: 'Расход' },
@@ -14,6 +15,8 @@ const TYPES: { value: TxType; label: string }[] = [
 ]
 const KINDS = (Object.keys(INCOME_LABEL) as IncomeKind[]).map(k => ({ value: k, label: INCOME_LABEL[k], icon: INCOME_ICON[k] }))
 
+const yesterday = () => { const d = new Date(); d.setDate(d.getDate() - 1); return todayISO(d) }
+
 /** Быстрый ввод операции; с `tx` — редактирование существующей. */
 export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx: Tx) => void }) {
   const accounts = activeAccounts(data.accounts)
@@ -21,7 +24,7 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
   const initialCat = tx?.categoryId != null ? data.categories.find(c => c.id === tx.categoryId) : undefined
 
   const [type, setType] = useState<TxType>(tx?.type ?? 'expense')
-  const [amount, setAmount] = useState(toInput(tx?.amount))
+  const [expr, setExpr] = useState(tx ? amountToInput(tx.amount) : '')
   const [accountId, setAccountId] = useState<number | null>(tx?.accountId ?? defaultAcc)
   const [rootId, setRootId] = useState<number | null>(initialCat ? (initialCat.parentId ?? initialCat.id!) : null)
   const [subId, setSubId] = useState<number | null>(initialCat?.parentId != null ? initialCat.id! : null)
@@ -36,7 +39,7 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
   const acc = data.accounts.find(a => a.id === accountId)
   const toAcc = data.accounts.find(a => a.id === toAccountId)
   const isExchange = type === 'transfer' && acc && toAcc && acc.currency !== toAcc.currency
-  const minor = fromInput(amount)
+  const minor = evalAmount(expr)
 
   // Частые категории — первыми (по тратам за 90 дней).
   const roots = useMemo(() => {
@@ -51,6 +54,30 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
     return rootCategories(data.categories).sort((a, b) => (freq.get(b.id!) ?? 0) - (freq.get(a.id!) ?? 0))
   }, [data.txs, data.categories])
   const subs = rootId != null ? childrenOf(data.categories, rootId) : []
+
+  // Недавние траты (разные по категории и комментарию) — повтор в одно касание.
+  const recent = useMemo(() => {
+    const seen = new Set<string>()
+    const out: Tx[] = []
+    for (const t of [...data.txs].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt)) {
+      if (t.type !== 'expense' || t.categoryId == null) continue
+      const key = `${t.categoryId}|${t.comment}|${t.amount}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(t)
+      if (out.length >= 8) break
+    }
+    return out
+  }, [data.txs])
+
+  function repeat(t: Tx) {
+    const c = data.categories.find(x => x.id === t.categoryId)
+    setRootId(c?.parentId ?? c?.id ?? null)
+    setSubId(c?.parentId != null ? c.id! : null)
+    setExpr(amountToInput(t.amount))
+    setComment(t.comment)
+    if (accounts.some(a => a.id === t.accountId)) setAccountId(t.accountId)
+  }
 
   const rubHint = acc && acc.currency !== 'RUB' && minor ? convertToRub(minor, acc.currency, data.latestRate) : null
   const cbrTo = isExchange && minor && data.latestRate
@@ -92,7 +119,7 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
         await db.allocations.where('txId').equals(tx.id).delete()
       }
       if (!tx) {
-        setAmount(''); setComment(''); setToAmount(''); setSubId(null); setRootId(null)
+        setExpr(''); setComment(''); setToAmount(''); setSubId(null); setRootId(null)
       }
       onSaved({ ...record, id })
     } finally {
@@ -100,42 +127,77 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
     }
   })
 
-  const accOptions = accounts.map(a => ({ value: a.id!, label: `${a.name} ${CUR_SUFFIX[a.currency]}`, icon: 'wallet' as const }))
+  const accRow = (value: number | null, onPick: (id: number) => void, exclude?: number | null) => (
+    <div className="scroll-row">
+      {accounts.filter(a => a.id !== exclude).map(a => (
+        <button key={a.id} type="button" className={a.id === value ? 'chip on' : 'chip'} onClick={() => onPick(a.id!)}>
+          <Icon name="wallet" size={16} />{a.name}{a.currency !== 'RUB' ? ` ${CUR_SUFFIX[a.currency]}` : ''}
+        </button>
+      ))}
+    </div>
+  )
+
+  const tile = (key: string | number, icon: IconName, label: string, tone: string, on: boolean, onClick: () => void) => (
+    <button key={key} type="button" className={on ? 'tile-btn on' : 'tile-btn'} onClick={onClick}>
+      <span className={`badge tone-${tone}`}><Icon name={icon} size={22} /></span>
+      <span className="tile-label">{label}</span>
+    </button>
+  )
 
   return (
     <div className="entry">
       <Segmented className="type" value={type} onChange={setType} options={TYPES} />
 
-      <AmountInput value={amount} onChange={setAmount} big autoFocus={!tx} tone={type} suffix={acc ? CUR_SUFFIX[acc.currency] : ''} />
-      {rubHint != null && <div className="hint center">≈ {formatMoney(rubHint)}</div>}
+      <div className={`amount-display ${type}`} aria-live="polite">
+        <span className="v">{expr || '0'}</span><span className="cur">{acc ? CUR_SUFFIX[acc.currency] : '₽'}</span>
+      </div>
+      <div className="amount-sub">
+        {hasOperator(expr) && minor ? <>= {formatMoney(minor, acc?.currency)}</> : rubHint != null ? <>≈ {formatMoney(rubHint)}</> : ' '}
+      </div>
 
-      <label className="field-label">{type === 'transfer' ? 'Откуда' : 'Счёт'}</label>
-      <Chips options={accOptions} value={accountId} onChange={setAccountId} />
+      {type === 'expense' && !tx && recent.length > 0 && (
+        <div className="scroll-row" style={{ marginBottom: 12 }}>
+          {recent.map(t => {
+            const c = data.categories.find(x => x.id === t.categoryId)
+            return (
+              <button key={t.id} type="button" className="chip recent" onClick={() => repeat(t)}>
+                <Icon name="repeat" size={14} /> {t.comment || c?.name} · {formatMoney(t.amount)}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {type === 'expense' && (
         <>
-          <label className="field-label">Категория</label>
-          <Chips options={roots.map(c => ({ value: c.id!, label: c.name, icon: categoryIcon(c) }))} value={rootId} onChange={v => { setRootId(v); setSubId(null) }} />
+          <div className="tile-grid">
+            {roots.map(c => (
+              tile(c.id!, categoryIcon(c), c.name, c.bucket, c.id === rootId, () => { setRootId(c.id!); setSubId(null) })
+            ))}
+          </div>
           {subs.length > 0 && (
-            <>
-              <label className="field-label">Подкатегория <span className="muted">(необязательно)</span></label>
-              <Chips options={subs.map(c => ({ value: c.id!, label: c.name }))} value={subId} onChange={v => setSubId(v === subId ? null : v)} />
-            </>
+            <div className="scroll-row" style={{ marginTop: 10 }}>
+              {subs.map(c => (
+                <button key={c.id} type="button" className={c.id === subId ? 'chip on' : 'chip'} onClick={() => setSubId(c.id === subId ? null : c.id!)}>{c.name}</button>
+              ))}
+            </div>
           )}
         </>
       )}
 
       {type === 'income' && (
-        <>
-          <label className="field-label">Что за доход</label>
-          <Chips options={KINDS} value={kind} onChange={setKind} />
-        </>
+        <div className="tile-grid">
+          {KINDS.map(k => tile(k.value, k.icon, k.label, 'income', k.value === kind, () => setKind(k.value)))}
+        </div>
       )}
+
+      <label className="field-label">{type === 'transfer' ? 'Откуда' : type === 'income' ? 'На счёт' : 'Со счёта'}</label>
+      {accRow(accountId, setAccountId)}
 
       {type === 'transfer' && (
         <>
           <label className="field-label">Куда</label>
-          <Chips options={accOptions.filter(o => o.value !== accountId)} value={toAccountId} onChange={setToAccountId} />
+          {accRow(toAccountId, setToAccountId, accountId)}
           {isExchange && (
             <>
               <label className="field-label">Сколько пришло, {CUR_SUFFIX[toAcc!.currency]}</label>
@@ -146,19 +208,20 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
         </>
       )}
 
-      <div className="row2">
-        <div>
-          <label className="field-label">Дата</label>
+      <div className="scroll-row" style={{ marginTop: 14 }}>
+        <button type="button" className={date === todayISO() ? 'chip on' : 'chip'} onClick={() => setDate(todayISO())}>Сегодня</button>
+        <button type="button" className={date === yesterday() ? 'chip on' : 'chip'} onClick={() => setDate(yesterday())}>Вчера</button>
+        <label className={date !== todayISO() && date !== yesterday() ? 'chip on date-chip' : 'chip date-chip'}>
+          <Icon name="calendar" size={16} />
+          {date !== todayISO() && date !== yesterday() ? new Date(date + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : 'Дата'}
           <input type="date" value={date} max={todayISO()} onChange={e => setDate(e.target.value || todayISO())} />
-        </div>
-        <div>
-          <label className="field-label">Комментарий</label>
-          <input value={comment} onChange={e => setComment(e.target.value)} placeholder="—" />
-        </div>
+        </label>
       </div>
 
+      <input className="comment" value={comment} onChange={e => setComment(e.target.value)} placeholder="Комментарий (необязательно)" />
+
       {error && <div className="error">{error}</div>}
-      <button className="save" disabled={saving} onClick={save}>Сохранить</button>
+      <Keypad onKey={k => setExpr(e => applyKey(e, k))} onSave={save} saving={saving} />
     </div>
   )
 }

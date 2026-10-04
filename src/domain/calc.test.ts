@@ -275,3 +275,19 @@ describe('прогноз и копилки', () => {
     expect(capitalByMonth(accounts, txs, ['2026-07', '2026-08', '2026-09'], m => m)).toEqual([R(1000), R(1500), R(800)])
   })
 })
+
+import { evalAmount, hasOperator } from './money'
+
+describe('калькулятор суммы', () => {
+  it('складывает и вычитает', () => {
+    expect(evalAmount('300')).toBe(30000)
+    expect(evalAmount('300+85')).toBe(38500)
+    expect(evalAmount('300+85−20,5')).toBe(36450)
+    expect(evalAmount('300+')).toBe(30000)
+    expect(evalAmount('100−200')).toBeNull()
+    expect(evalAmount('')).toBeNull()
+    expect(evalAmount('1,234')).toBeNull()
+    expect(hasOperator('300+85')).toBe(true)
+    expect(hasOperator('300')).toBe(false)
+  })
+})

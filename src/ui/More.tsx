@@ -12,9 +12,9 @@ export type MoreSection = 'rule' | 'pay' | 'categories' | 'recurring' | 'securit
 export type MorePage = 'calendar' | 'analytics' | 'accounts'
 
 const PAGES: { id: MorePage; label: string; sub: string; icon: IconName }[] = [
-  { id: 'calendar', label: 'Календарь', sub: 'платежи и выплаты по дням', icon: 'calendar' },
-  { id: 'analytics', label: 'Аналитика', sub: 'структура и динамика', icon: 'chart' },
-  { id: 'accounts', label: 'Счета и цели', sub: 'балансы, накопления', icon: 'wallet' },
+  { id: 'accounts', label: 'Счета', sub: 'балансы и цели', icon: 'wallet' },
+  { id: 'analytics', label: 'Аналитика', sub: 'куда уходят', icon: 'chart' },
+  { id: 'calendar', label: 'Календарь', sub: 'платежи', icon: 'calendar' },
 ]
 
 const SECTIONS: { id: MoreSection; label: string; icon: IconName }[] = [
@@ -36,12 +36,12 @@ export function More({ data, section, setSection, onOpenPage }: {
   return (
     <div className="page">
       <div className="page-head"><h1>Ещё</h1></div>
-      <div className="card tight">
+      <div className="big-tiles">
         {PAGES.map(p => (
-          <button className="row" key={p.id} onClick={() => onOpenPage(p.id)}>
-            <span className="badge" style={{ width: 40, height: 40, background: 'var(--accent-soft)', color: 'var(--accent)' }}><Icon name={p.icon} size={20} /></span>
-            <div className="body"><div className="title">{p.label}</div><div className="sub">{p.sub}</div></div>
-            <span className="chev"><Icon name="right" size={18} /></span>
+          <button className="big-tile" key={p.id} onClick={() => onOpenPage(p.id)}>
+            <span className="badge"><Icon name={p.icon} size={24} /></span>
+            <strong>{p.label}</strong>
+            <span className="muted small">{p.sub}</span>
           </button>
         ))}
       </div>

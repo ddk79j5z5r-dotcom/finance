@@ -3,7 +3,7 @@ import type { LockRow } from './db'
 import type { Tx } from './domain/types'
 import { getLock, isLockEnabled } from './lock'
 import { Accounts } from './ui/Accounts'
-import { Analytics } from './ui/Analytics'
+import { Analytics, type Mode } from './ui/Analytics'
 import { Budget } from './ui/Budget'
 import { Calendar } from './ui/Calendar'
 import { Sheet } from './ui/common'
@@ -30,6 +30,7 @@ export default function App() {
   const data = useData()
   const [tab, setTab] = useState<Tab>('home')
   const [morePage, setMorePage] = useState<MorePage | null>(null)
+  const [analyticsMode, setAnalyticsMode] = useState<Mode>('expense')
   const [section, setSection] = useState<MoreSection | null>(null)
   const [adding, setAdding] = useState(false)
   const [editTx, setEditTx] = useState<Tx | null>(null)
@@ -72,7 +73,8 @@ export default function App() {
       <main>
         {tab === 'home' && (
           <Home data={data} onDistribute={setDistribute} onOpenBudget={() => setTab('budget')}
-            onOpenCalendar={() => openMore('calendar')} onOpenBackup={() => openMore(null, 'backup')} onOpenTx={setEditTx} onOpenAccounts={() => openMore('accounts')} />
+            onOpenCalendar={() => openMore('calendar')} onOpenBackup={() => openMore(null, 'backup')} onOpenTx={setEditTx} onOpenAccounts={() => openMore('accounts')}
+            onOpenAnalytics={m => { setAnalyticsMode(m); openMore('analytics') }} />
         )}
         {tab === 'history' && <History data={data} />}
         {tab === 'budget' && <Budget data={data} onDistribute={setDistribute} />}
@@ -83,12 +85,12 @@ export default function App() {
             </div>
             <div style={{ marginTop: -18 }}>
               {morePage === 'calendar' && <Calendar data={data} />}
-              {morePage === 'analytics' && <Analytics data={data} />}
+              {morePage === 'analytics' && <Analytics data={data} initialMode={analyticsMode} />}
               {morePage === 'accounts' && <Accounts data={data} />}
             </div>
           </div>
         )}
-        {tab === 'more' && !morePage && <More data={data} section={section} setSection={setSection} onOpenPage={setMorePage} />}
+        {tab === 'more' && !morePage && <More data={data} section={section} setSection={setSection} onOpenPage={p => { setAnalyticsMode('expense'); setMorePage(p) }} />}
       </main>
 
       {toast && <div className="toast">✓ {toast}</div>}

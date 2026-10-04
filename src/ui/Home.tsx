@@ -13,7 +13,7 @@ function inDays(date: string, today: string) {
   return n === 0 ? 'сегодня' : n === 1 ? 'завтра' : `через ${n} дн.`
 }
 
-export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenBackup, onOpenTx, onOpenAccounts }: {
+export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenBackup, onOpenTx, onOpenAccounts, onOpenAnalytics }: {
   data: Data
   onDistribute: (t: Tx) => void
   onOpenBudget: () => void
@@ -21,6 +21,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
   onOpenBackup: () => void
   onOpenTx: (t: Tx) => void
   onOpenAccounts: () => void
+  onOpenAnalytics: (mode: 'income' | 'expense') => void
 }) {
   const hidden = useAmountsHidden()
   const today = todayISO()
@@ -100,16 +101,16 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
           </button>
         )}
         <div className="tiles">
-          <div className="tile">
+          <button className="tile" onClick={() => onOpenAnalytics('income')}>
             <div className="k">Доходы за месяц</div>
             <div className="v pos"><Money v={totals.income} round /></div>
             {avg && !hidden && <div className="muted small">ср. {formatMoney(Math.round(avg.income / 100) * 100)}</div>}
-          </div>
-          <div className="tile">
+          </button>
+          <button className="tile" onClick={() => onOpenAnalytics('expense')}>
             <div className="k">Расходы за месяц</div>
             <div className="v neg"><Money v={totals.expense} round /></div>
             {avg && !hidden && <div className="muted small">ср. {formatMoney(Math.round(avg.expense / 100) * 100)}</div>}
-          </div>
+          </button>
         </div>
       </div>
 
@@ -131,7 +132,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
             доходы ≈ <Money v={forecast.income} round /> · расходы ≈ <Money v={forecast.expense} round />
             {forecast.fixedLeft > 0 && <> · ещё платежей <Money v={forecast.fixedLeft} round /></>}
           </div>
-          {overspent > 0 && (
+          {overspent > 0 && totals.income > 0 && (
             <p className="warn">Расходы уже больше доходов месяца на <Money v={overspent} round /></p>
           )}
           {forecast.balance < 0 && !hidden && (

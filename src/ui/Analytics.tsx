@@ -5,7 +5,7 @@ import { INCOME_LABEL } from '../domain/types'
 import { Money, MonthNav, Segmented, useAmountsHidden } from './common'
 import type { Data } from './data'
 
-type Mode = 'expense' | 'income'
+export type Mode = 'expense' | 'income'
 type Period = 'month' | 'quarter' | 'year'
 const PERIOD_MONTHS: Record<Period, number> = { month: 1, quarter: 3, year: 12 }
 /** Категориальная палитра (проверена на различимость, в т.ч. при дальтонизме): 5 цветов + «Другое». */
@@ -15,8 +15,8 @@ const SHORT_MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн'
 
 interface Slice { key: string; label: string; rub: number; color: string }
 
-export function Analytics({ data }: { data: Data }) {
-  const [mode, setMode] = useState<Mode>('expense')
+export function Analytics({ data, initialMode = 'expense' }: { data: Data; initialMode?: Mode }) {
+  const [mode, setMode] = useState<Mode>(initialMode)
   const [period, setPeriod] = useState<Period>('month')
   const [month, setMonth] = useState(monthOf(todayISO()))
   const [active, setActive] = useState<string | null>(null)
