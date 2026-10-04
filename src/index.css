@@ -252,3 +252,8 @@ h3 { font-size: 17px; margin: 0; font-weight: 650; }
 .alert-card { border: 1px solid color-mix(in srgb, var(--neg) 45%, transparent); }
 .pill { font-size: 12.5px; font-weight: 650; padding: 3px 9px; border-radius: 999px; background: var(--card-2); white-space: nowrap; }
 .warn-t { color: var(--warn); }
+.acc-mini { display: block; width: 100%; margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+.acc-mini .line { padding: 5px 0; font-size: 15px; }
+.acc-mini .n { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acc-mini .more { color: var(--accent); font-size: 14px; justify-content: flex-start; gap: 2px; }
+.hero .label .link { font-size: 15px; }

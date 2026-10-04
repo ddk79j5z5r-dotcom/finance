@@ -13,19 +13,26 @@ function inDays(date: string, today: string) {
   return n === 0 ? 'сегодня' : n === 1 ? 'завтра' : `через ${n} дн.`
 }
 
-export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenBackup, onOpenTx }: {
+export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenBackup, onOpenTx, onOpenAccounts }: {
   data: Data
   onDistribute: (t: Tx) => void
   onOpenBudget: () => void
   onOpenCalendar: () => void
   onOpenBackup: () => void
   onOpenTx: (t: Tx) => void
+  onOpenAccounts: () => void
 }) {
   const hidden = useAmountsHidden()
   const today = todayISO()
   const month = monthOf(today)
   const accounts = activeAccounts(data.accounts)
   const total = accounts.reduce((s, a) => s + (data.toRub(data.bal.get(a.id!) ?? 0, a.currency) ?? 0), 0)
+  // Самые крупные счета по сумме в рублях; пустые не показываем.
+  const topAccounts = accounts
+    .map(a => ({ a, rub: data.toRub(data.bal.get(a.id!) ?? 0, a.currency) ?? 0 }))
+    .filter(x => x.rub !== 0)
+    .sort((x, y) => Math.abs(y.rub) - Math.abs(x.rub))
+    .slice(0, 4)
   const since = new Date(); since.setDate(since.getDate() - 29)
   const delta = netChangeSince(data.txs, todayISO(since))
   const totals = monthTotals(data.txs, month)
@@ -67,6 +74,8 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
       <div className="card hero">
         <div className="label">
           <span>Общий баланс</span>
+          <span style={{ flex: 1 }} />
+          <button className="link" onClick={onOpenAccounts}>Все счета</button>
           <button className="icon-btn" aria-label={hidden ? 'Показать суммы' : 'Скрыть суммы'} onClick={() => setAmountsHidden(!hidden)}>
             <Icon name={hidden ? 'eyeOff' : 'eye'} size={20} />
           </button>
@@ -76,6 +85,19 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
           <div className={`delta ${delta > 0 ? 'pos' : 'neg'}`}>
             {delta > 0 ? '↑' : '↓'} {formatMoney(Math.round(Math.abs(delta) / 100) * 100)} за 30 дней
           </div>
+        )}
+        {topAccounts.length > 0 && (
+          <button className="acc-mini" onClick={onOpenAccounts} aria-label="Открыть все счета">
+            {topAccounts.map(({ a }) => (
+              <span className="line" key={a.id}>
+                <span className="n">{a.name}</span>
+                <span className="num"><Money v={data.bal.get(a.id!) ?? 0} cur={a.currency} round /></span>
+              </span>
+            ))}
+            {accounts.length > topAccounts.length && (
+              <span className="line more"><span>ещё {accounts.length - topAccounts.length}</span><Icon name="right" size={16} /></span>
+            )}
+          </button>
         )}
         <div className="tiles">
           <div className="tile">

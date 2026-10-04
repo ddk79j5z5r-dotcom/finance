@@ -72,7 +72,7 @@ export default function App() {
       <main>
         {tab === 'home' && (
           <Home data={data} onDistribute={setDistribute} onOpenBudget={() => setTab('budget')}
-            onOpenCalendar={() => openMore('calendar')} onOpenBackup={() => openMore(null, 'backup')} onOpenTx={setEditTx} />
+            onOpenCalendar={() => openMore('calendar')} onOpenBackup={() => openMore(null, 'backup')} onOpenTx={setEditTx} onOpenAccounts={() => openMore('accounts')} />
         )}
         {tab === 'history' && <History data={data} />}
         {tab === 'budget' && <Budget data={data} onDistribute={setDistribute} />}
