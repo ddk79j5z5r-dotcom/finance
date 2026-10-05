@@ -434,8 +434,9 @@ h3 { font-size: 17px; margin: 0; font-weight: 650; }
 .app::before {
   content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background:
-    radial-gradient(60% 40% at 10% 0%, var(--blob-1), transparent 70%),
-    radial-gradient(50% 35% at 100% 30%, var(--blob-2), transparent 70%),
+    linear-gradient(to bottom, var(--bg) 0, var(--bg) env(safe-area-inset-top, 0px), transparent calc(env(safe-area-inset-top, 0px) + 140px)),
+    radial-gradient(60% 38% at 8% 18%, var(--blob-1), transparent 70%),
+    radial-gradient(50% 35% at 100% 40%, var(--blob-2), transparent 70%),
     radial-gradient(60% 40% at 30% 100%, var(--blob-3), transparent 70%),
     var(--bg);
 }
@@ -542,19 +543,20 @@ h3 { font-weight: 600; }
 .tone-dot-inline.tone-savings { background: var(--savings); }
 
 /* ---------- Окна над клавиатурой iOS ---------- */
-/* Подложка окна совпадает с видимой областью (над клавиатурой), окно прижато к её низу. */
+/* Подложка — от верха видимой области до низа экрана; окно прижато к низу и продолжается
+   за клавиатурой (отступ снизу = высота клавиатуры), поэтому клавиатура ложится на фон окна без щели. */
 .sheet-backdrop {
   top: var(--vvtop, 0px);
   bottom: auto;
-  height: var(--vvh, 100dvh);
+  height: calc(var(--vvh, 100dvh) + var(--kb, 0px));
 }
-.sheet { max-height: calc(var(--vvh, 100dvh) - 12px); }
-.sheet.full { height: var(--vvh, 100dvh); max-height: var(--vvh, 100dvh); }
-/* Пока открыта клавиатура: окно — на всю видимую высоту и без нижнего отступа под «домой»,
-   своя цифровая клавиатура ввода суммы прячется, чтобы не занимать место. */
-.kb-open .sheet { padding-bottom: 0; }
-.kb-open .sheet-body { padding-bottom: 12px; }
+.sheet { max-height: calc(var(--vvh, 100dvh) + var(--kb, 0px) - 12px); }
+.sheet.full { height: calc(var(--vvh, 100dvh) + var(--kb, 0px)); max-height: none; }
+.kb-open .sheet { padding-bottom: var(--kb, 0px); }
+.kb-open .sheet-body { padding-bottom: 16px; }
+/* Пока открыта системная клавиатура, своя цифровая и нижняя панель прячутся. */
 .kb-open .keypad { display: none; }
 .kb-open .tabs { display: none; }
-/* Экран блокировки — тоже по видимой области, чтобы поле PIN не уходило под клавиатуру. */
+/* Экран блокировки — по видимой области, чтобы поле PIN не уходило под клавиатуру. */
 .lock { min-height: var(--vvh, 100dvh); }
+.air .air-stats:last-child { border-bottom: 0; padding-bottom: 0; }
