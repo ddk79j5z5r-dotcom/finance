@@ -3,12 +3,12 @@ import { db } from '../db'
 import { amountToInput, evalAmount, formatMoney, hasOperator, todayISO } from '../domain/money'
 import { convertToRub, rateFor } from '../domain/rates'
 import { accountKind, accountsForEntry } from '../domain/calc'
-import { INCOME_LABEL, type Account, type IncomeKind, type Tx, type TxType } from '../domain/types'
+import { INCOME_LABEL, type IncomeKind, type Tx, type TxType } from '../domain/types'
 import { AmountInput, CUR_SUFFIX, fromInput, Segmented, toInput, useOnce } from './common'
 import { activeAccounts, childrenOf, rootCategories, type Data } from './data'
 import { categoryIcon, Icon, INCOME_ICON, type IconName } from './icons'
 import { applyKey, Keypad } from './Keypad'
-import { AccountDot } from './AccountBadge'
+import { AccountPicker } from './AccountPicker'
 
 const TYPES: { value: TxType; label: string }[] = [
   { value: 'expense', label: 'Расход' },
@@ -141,16 +141,6 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
     }
   })
 
-  const accRow = (list: Account[], value: number | null, onPick: (id: number) => void, exclude?: number | null) => (
-    <div className="scroll-row">
-      {list.filter(a => a.id !== exclude).map(a => (
-        <button key={a.id} type="button" className={a.id === value ? 'chip on' : 'chip'} onClick={() => onPick(a.id!)}>
-          <AccountDot color={data.colorOf(a)} />{a.name}{a.currency !== 'RUB' ? ` ${CUR_SUFFIX[a.currency]}` : ''}
-        </button>
-      ))}
-    </div>
-  )
-
   const tile = (key: string | number, icon: IconName, label: string, tone: string, on: boolean, onClick: () => void) => (
     <button key={key} type="button" className={on ? 'tile-btn on' : 'tile-btn'} onClick={onClick}>
       <span className={`badge tone-${tone}`}><Icon name={icon} size={22} /></span>
@@ -167,6 +157,18 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
       </div>
       <div className="amount-sub">
         {hasOperator(expr) && minor ? <>= {formatMoney(minor, acc?.currency)}</> : rubHint != null ? <>≈ {formatMoney(rubHint)}</> : ' '}
+      </div>
+
+      <div className="acc-picks">
+        <AccountPicker data={data} accounts={accounts} value={accountId} onChange={setAccountId}
+          label={type === 'transfer' ? 'Откуда' : type === 'income' ? 'На счёт' : 'Со счёта'} />
+        {type === 'transfer' && (
+          <>
+            <button type="button" className="swap" aria-label="Поменять счета местами"
+              onClick={() => { const a = accountId; setAccountId(toAccountId); setToAccountId(a) }}>⇅</button>
+            <AccountPicker data={data} accounts={toAccounts} value={toAccountId} onChange={setToAccountId} label="Куда" exclude={accountId} />
+          </>
+        )}
       </div>
 
       {type === 'expense' && !tx && recent.length > 0 && (
@@ -205,13 +207,9 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
         </div>
       )}
 
-      <label className="field-label">{type === 'transfer' ? 'Откуда' : type === 'income' ? 'На счёт' : 'Со счёта'}</label>
-      {accRow(accounts, accountId, setAccountId)}
 
       {type === 'transfer' && (
         <>
-          <label className="field-label">Куда</label>
-          {accRow(toAccounts, toAccountId, setToAccountId, accountId)}
           {isExchange && (
             <>
               <label className="field-label">Сколько пришло, {CUR_SUFFIX[toAcc!.currency]}</label>

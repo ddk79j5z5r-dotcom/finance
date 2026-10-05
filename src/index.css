@@ -352,3 +352,17 @@ h3 { font-size: 17px; margin: 0; font-weight: 650; }
 .bond-row .amt .sub.pos { color: var(--pos); }
 .bond-row .amt .sub.neg { color: var(--neg); }
 .row .body .title, .row .body .sub { display: block; }
+
+/* ---------- Выбор счёта ---------- */
+.acc-picks { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; position: relative; }
+.acc-pick { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; min-height: 58px; border-radius: 14px; background: var(--card); box-shadow: var(--shadow); color: var(--muted); }
+.acc-pick .body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.acc-pick .k { font-size: 13px; color: var(--muted); }
+.acc-pick .v { font-size: 17px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acc-pick .bal { color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.swap { position: absolute; right: 52px; top: 50%; transform: translateY(-50%); z-index: 1; width: 34px; height: 34px; border-radius: 50%; background: var(--card-2); border: 2px solid var(--sheet); font-size: 17px; text-align: center; color: var(--accent); }
+.acc-bars { display: flex; flex-direction: column; gap: 8px; }
+.acc-bar { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 0 18px; border-radius: 16px; font-size: 17px; font-weight: 650; }
+.acc-bar .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.acc-bar.on { outline: 3px solid var(--text); outline-offset: 2px; }
+.acc-bar:not(.acc-yellow) { color: #fff; }
