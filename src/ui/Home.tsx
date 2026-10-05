@@ -1,4 +1,4 @@
-import { monthForecast, monthTotals, netChangeSince, savingsRate, upcoming, type PlannedEvent } from '../domain/calc'
+import { bucketStates, freeInMonth, monthForecast, monthTotals, netChangeSince, upcoming, type PlannedEvent } from '../domain/calc'
 import { bondEvents, type BondEvent } from '../domain/bonds'
 import { BondEventSheet } from './Bonds'
 import { useState } from 'react'
@@ -49,7 +49,8 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
     ? Date.now() - data.settings.lastExportAt > 7 * 864e5
     : !!data.settings.setupDismissed)
   const forecast = monthForecast(data, data.settings, today, r => data.toRub(r.amount, r.currency) ?? r.amount)
-  const rate = savingsRate({ income: forecast.income, expense: forecast.expense })
+  const buckets = bucketStates(data, month, data.settings)
+  const free = freeInMonth(data, month)
 
   return (
     <div className="page air">
@@ -79,7 +80,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
         <div className="air-notices glass">
           {pending.map(t => (
             <button className="air-notice" key={t.id} onClick={() => onDistribute(t)}>
-              <span>Пришло: {INCOME_LABEL[t.incomeKind!].toLowerCase()} <Money v={t.rub} round /> — распределить</span><Icon name="right" size={16} />
+              <span>Пришло: {INCOME_LABEL[t.incomeKind!].toLowerCase()} <Money v={t.rub} round /> — рекомендация</span><Icon name="right" size={16} />
             </button>
           ))}
           {data.pendingBond.slice(0, 3).map(ev => (
@@ -110,7 +111,12 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
               {forecast.balance < 0 ? 'Месяц уходит в минус' : 'К концу месяца останется'}{' '}
               <strong className={forecast.balance < 0 ? 'neg' : ''}>≈ <Money v={forecast.balance} round /></strong>
             </span>
-            {rate != null && <span className="muted">сбережения ≈ {Math.round(rate * 100)}%</span>}
+            <span className="rule-line">
+              <span><i className="tone-dot-inline tone-needs" />Нужды <Money v={buckets.needs.spent} round /> / <Money v={buckets.needs.target} round /></span>
+              <span><i className="tone-dot-inline tone-wants" />Желания <Money v={buckets.wants.spent} round /> / <Money v={buckets.wants.target} round /></span>
+              <span><i className="tone-dot-inline tone-savings" />Отложено <Money v={buckets.savings.spent} round /> / <Money v={buckets.savings.target} round /></span>
+              <span className="muted">Свободный остаток <Money v={free} round /></span>
+            </span>
           </button>
         )}
       </div>

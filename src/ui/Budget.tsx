@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { db } from '../db'
-import { bucketStates, envelopes, isPaid, planIncome } from '../domain/calc'
+import { bucketStates, envelopes, freeInMonth, isPaid, planIncome } from '../domain/calc'
 import { formatMoney, monthLabel, monthOf, shiftMonth, todayISO } from '../domain/money'
 import { BUCKET_LABEL, BUCKETS, INCOME_LABEL, type Category, type Recurring, type Tx } from '../domain/types'
 import { AmountInput, Bar, fromInput, Money, MonthNav, Sheet, toInput, useOnce } from './common'
@@ -18,6 +18,7 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
   const envs = envelopes(data.categories, data.limits, data.txs, month)
     .filter(e => e.limit || e.spent || !e.category.system)
   const income = planIncome(data.txs, month, data.settings)
+  const free = freeInMonth(data, month)
   const plan = envs.reduce((s, e) => s + e.limit, 0)
   const fact = envs.reduce((s, e) => s + e.spent, 0)
   const allocated = new Set(data.allocations.map(a => a.txId))
@@ -44,7 +45,7 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
       {pending.map(t => (
         <button className="banner accent-b" key={t.id} onClick={() => onDistribute(t)}>
           <Badge icon="banknote" tone="income" size={34} />
-          <span className="body">{INCOME_LABEL[t.incomeKind!]} <strong><Money v={t.rub} /></strong> — распределить</span>
+          <span className="body">{INCOME_LABEL[t.incomeKind!]} <strong><Money v={t.rub} /></strong> — рекомендация</span>
           <Icon name="right" size={18} />
         </button>
       ))}
@@ -76,8 +77,8 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
 
       <div className="card">
         <div className="line" style={{ paddingTop: 0 }}>
-          <h3>Правило {data.settings.rule.needs}/{data.settings.rule.wants}/{data.settings.rule.savings}</h3>
-          <span className="muted small">доход <Money v={income} round /></span>
+          <h3>Рекомендация {data.settings.rule.needs}/{data.settings.rule.wants}/{data.settings.rule.savings}</h3>
+          <span className="muted small">от дохода <Money v={income} round /></span>
         </div>
         {noExpected && <p className="hint">Укажи ожидаемые зарплату и аванс в «Ещё → Выплаты», чтобы план был виден с начала месяца.</p>}
         {BUCKETS.map(b => {
@@ -85,8 +86,8 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
           return (
             <div key={b} style={{ marginTop: 10 }}>
               <div className="line small" style={{ padding: 0 }}>
-                <span><strong>{BUCKET_LABEL[b]}</strong> <span className="muted">{data.settings.rule[b]}%</span></span>
-                <span className="num"><Money v={s.spent} round /> <span className="muted">/ <Money v={s.target} round /></span></span>
+                <span><strong>{b === 'savings' ? 'Отложено' : BUCKET_LABEL[b]}</strong> <span className="muted">{data.settings.rule[b]}%</span></span>
+                <span className="num"><Money v={s.spent} round /> <span className="muted">/ рек. <Money v={s.target} round /></span></span>
               </div>
               <Bar value={s.spent} max={s.target} color={`var(--${b})`} />
               {b !== 'savings' && s.planned > s.target && s.target > 0 && (
@@ -95,6 +96,13 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
             </div>
           )
         })}
+        <div className="line small" style={{ marginTop: 12, paddingBottom: 0, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
+          <span className="muted">Свободный остаток</span>
+          <strong className={`num ${free < 0 ? 'neg' : ''}`}><Money v={free} round /></strong>
+        </div>
+        <p className="hint" style={{ margin: '4px 0 0', fontSize: 13 }}>
+          Нужды и желания — траты по категориям. Отложено — переводы на счета с пометкой «Сбережения». Остаток — пришло, но не потрачено и не отложено.
+        </p>
       </div>
 
       <div className="section-title"><h3>Категории</h3><span className="muted small">нажми — лимит, <Icon name="list" size={13} /> — операции</span></div>

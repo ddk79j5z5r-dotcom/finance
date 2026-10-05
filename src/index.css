@@ -534,3 +534,9 @@ h3 { font-weight: 600; }
 .banner > span.thin-ico:first-child, .air-notice > span.thin-ico:first-child { flex: none; }
 .thin-ico .tone-dot { width: 9px; height: 9px; right: 3px; bottom: 4px; }
 .key.save-key { background: var(--save); color: var(--on-save); }
+.rule-line { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; font-size: 14px; color: var(--text-2); }
+.rule-line > span { display: flex; align-items: center; gap: 6px; }
+.tone-dot-inline { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
+.tone-dot-inline.tone-needs { background: var(--needs); }
+.tone-dot-inline.tone-wants { background: var(--wants); }
+.tone-dot-inline.tone-savings { background: var(--savings); }

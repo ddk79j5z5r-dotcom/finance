@@ -99,7 +99,7 @@ export function Analytics({ data, initialMode = 'expense', onOpenOps }: { data: 
       <div className="card bars">
         <div className="line" style={{ paddingTop: 0 }}>
           <h3>Доходы и расходы</h3>
-          {(() => { const r = savingsRate(monthTotals(data.txs, month)); return r == null ? null : <span className={`pill ${r < 0 ? 'neg' : r < 0.1 ? 'warn-t' : 'pos'}`}>сбережения {Math.round(r * 100)}%</span> })()}
+          {(() => { const r = savingsRate(monthTotals(data.txs, month)); return r == null ? null : <span className={`pill ${r < 0 ? 'neg' : r < 0.1 ? 'warn-t' : 'pos'}`}>не потрачено {Math.round(r * 100)}%</span> })()}
         </div>
         <div className="legend" style={{ margin: '0 0 8px' }}>
           <span><i style={{ background: 'var(--s1)' }} />доходы</span>

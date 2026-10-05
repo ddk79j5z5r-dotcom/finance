@@ -157,8 +157,8 @@ function AccountSheet({ data, acc, onClose }: { data: Data; acc: Partial<Account
         ))}
       </div>
       <label className="check"><input type="checkbox" checked={showOnHome} onChange={e => setShowOnHome(e.target.checked)} /> Показывать на главной под балансом</label>
-      <label className="check"><input type="checkbox" checked={savings} onChange={e => setSavings(e.target.checked)} /> Сбережения в 50/30/20</label>
-      <p className="hint" style={{ marginTop: 4 }}>Переводы на этот счёт и купоны/проценты на нём считаются сбережениями. Для копилок под платежи (аренда, кредит) — выключи.</p>
+      <label className="check"><input type="checkbox" checked={savings} onChange={e => setSavings(e.target.checked)} /> Сбережения</label>
+      <p className="hint" style={{ marginTop: 4 }}>Переводы на этот счёт (и проценты/купоны на нём) считаются отложенными. Для копилок под платежи — «Квартплата», «Кредиты» — не ставь: оплата с них и так учтётся как нужда.</p>
       {(kind === 'savings' || hasBonds) && (
         <label className="check"><input type="checkbox" checked={taxFree} onChange={e => setTaxFree(e.target.checked)} /> Купоны без удержания налога (ИИС)</label>
       )}
