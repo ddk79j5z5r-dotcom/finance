@@ -3,19 +3,19 @@ import { db } from '../db'
 import { amountToInput, evalAmount, formatMoney, hasOperator, todayISO } from '../domain/money'
 import { convertToRub, rateFor } from '../domain/rates'
 import { accountKind, accountsForEntry } from '../domain/calc'
-import { INCOME_LABEL, type IncomeKind, type Tx, type TxType } from '../domain/types'
+import type { IncomeKind, Tx, TxType } from '../domain/types'
 import { AmountInput, CUR_SUFFIX, fromInput, Segmented, toInput, useOnce } from './common'
-import { activeAccounts, childrenOf, rootCategories, type Data } from './data'
-import { categoryIcon, Icon, INCOME_ICON, type IconName } from './icons'
+import { activeAccounts, rootCategories, type Data } from './data'
+import { Icon } from './icons'
 import { applyKey, Keypad } from './Keypad'
 import { AccountPicker } from './AccountPicker'
+import { CategoryPicker, IncomeKindPicker } from './Pickers'
 
 const TYPES: { value: TxType; label: string }[] = [
   { value: 'expense', label: 'Расход' },
   { value: 'income', label: 'Доход' },
   { value: 'transfer', label: 'Перевод' },
 ]
-const KINDS = (Object.keys(INCOME_LABEL) as IncomeKind[]).map(k => ({ value: k, label: INCOME_LABEL[k], icon: INCOME_ICON[k] }))
 
 const yesterday = () => { const d = new Date(); d.setDate(d.getDate() - 1); return todayISO(d) }
 
@@ -40,6 +40,7 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
   const [comment, setComment] = useState(tx?.comment ?? '')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [catOpen, setCatOpen] = useState(false)
 
   const acc = data.accounts.find(a => a.id === accountId)
   const toAcc = data.accounts.find(a => a.id === toAccountId)
@@ -58,7 +59,6 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
     }
     return rootCategories(data.categories).sort((a, b) => (freq.get(b.id!) ?? 0) - (freq.get(a.id!) ?? 0))
   }, [data.txs, data.categories])
-  const subs = rootId != null ? childrenOf(data.categories, rootId) : []
 
   // Недавние траты (разные по категории и комментарию) — повтор в одно касание.
   const recent = useMemo(() => {
@@ -102,7 +102,7 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
     setError('')
     if (!minor) return setError('Введи сумму')
     if (!acc) return setError('Выбери счёт')
-    if (type === 'expense' && rootId == null) return setError('Выбери категорию')
+    if (type === 'expense' && rootId == null) { setCatOpen(true); return }
     if (type === 'transfer') {
       if (!toAcc) return setError('Выбери, куда перевод')
       if (toAcc.id === acc.id) return setError('Счета совпадают')
@@ -141,13 +141,6 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
     }
   })
 
-  const tile = (key: string | number, icon: IconName, label: string, tone: string, on: boolean, onClick: () => void) => (
-    <button key={key} type="button" className={on ? 'tile-btn on' : 'tile-btn'} onClick={onClick}>
-      <span className={`badge tone-${tone}`}><Icon name={icon} size={22} /></span>
-      <span className="tile-label">{label}</span>
-    </button>
-  )
-
   return (
     <div className="entry">
       <Segmented className="type" value={type} onChange={setType} options={TYPES} />
@@ -157,18 +150,6 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
       </div>
       <div className="amount-sub">
         {hasOperator(expr) && minor ? <>= {formatMoney(minor, acc?.currency)}</> : rubHint != null ? <>≈ {formatMoney(rubHint)}</> : ' '}
-      </div>
-
-      <div className="acc-picks">
-        <AccountPicker data={data} accounts={accounts} value={accountId} onChange={setAccountId}
-          label={type === 'transfer' ? 'Откуда' : type === 'income' ? 'На счёт' : 'Со счёта'} />
-        {type === 'transfer' && (
-          <>
-            <button type="button" className="swap" aria-label="Поменять счета местами"
-              onClick={() => { const a = accountId; setAccountId(toAccountId); setToAccountId(a) }}>⇅</button>
-            <AccountPicker data={data} accounts={toAccounts} value={toAccountId} onChange={setToAccountId} label="Куда" exclude={accountId} />
-          </>
-        )}
       </div>
 
       {type === 'expense' && !tx && recent.length > 0 && (
@@ -184,29 +165,21 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
         </div>
       )}
 
-      {type === 'expense' && (
-        <>
-          <div className="tile-grid">
-            {roots.map(c => (
-              tile(c.id!, categoryIcon(c), c.name, c.bucket, c.id === rootId, () => pickCategory(c.id!, null))
-            ))}
-          </div>
-          {subs.length > 0 && (
-            <div className="scroll-row" style={{ marginTop: 10 }}>
-              {subs.map(c => (
-                <button key={c.id} type="button" className={c.id === subId ? 'chip on' : 'chip'} onClick={() => pickCategory(rootId, c.id === subId ? null : c.id!)}>{c.name}</button>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {type === 'income' && (
-        <div className="tile-grid">
-          {KINDS.map(k => tile(k.value, k.icon, k.label, 'income', k.value === kind, () => setKind(k.value)))}
-        </div>
-      )}
-
+      {/* Любая операция — «Откуда → Куда». */}
+      <div className="acc-picks">
+        {type === 'income'
+          ? <IncomeKindPicker value={kind} onPick={setKind} />
+          : <AccountPicker data={data} accounts={accounts} value={accountId} onChange={setAccountId} label="Откуда" />}
+        {type === 'transfer' && (
+          <button type="button" className="swap" aria-label="Поменять счета местами"
+            onClick={() => { const a = accountId; setAccountId(toAccountId); setToAccountId(a) }}>⇅</button>
+        )}
+        {type === 'expense' && (
+          <CategoryPicker data={data} roots={roots} rootId={rootId} subId={subId} onPick={pickCategory} open={catOpen} setOpen={setCatOpen} />
+        )}
+        {type === 'income' && <AccountPicker data={data} accounts={accounts} value={accountId} onChange={setAccountId} label="Куда" />}
+        {type === 'transfer' && <AccountPicker data={data} accounts={toAccounts} value={toAccountId} onChange={setToAccountId} label="Куда" exclude={accountId} />}
+      </div>
 
       {type === 'transfer' && (
         <>
