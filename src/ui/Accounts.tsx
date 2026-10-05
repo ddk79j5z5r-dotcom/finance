@@ -35,14 +35,14 @@ export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFi
 
       {groups.filter(([, list]) => list.length).map(([title, list], gi) => (
         <div key={title}>
-          <div className="section-title"><h3>{title}</h3>{gi === 0 && <span className="muted small">нажми — операции счёта</span>}</div>
+          <div className="section-title"><h3>{title}</h3>{gi === 0 && <span className="muted small">нажми — настройки</span>}</div>
           {list.map(a => {
             const b = data.value.get(a.id!) ?? 0
             const goals = data.progress.filter(p => p.goal.accountId === a.id)
             return (
               <div className="card" key={a.id} style={{ paddingTop: 4, paddingBottom: goals.length ? 10 : 4 }}>
                 <div className="row">
-                  <button className="row-main" onClick={() => onOpenOps({ accountId: a.id })}>
+                  <button className="row-main" onClick={() => setEditAcc(a)}>
                     <AccountBadge account={a} color={data.colorOf(a)} />
                     <div className="body">
                       <div className="title">{a.name}</div>
@@ -53,7 +53,6 @@ export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFi
                       {a.currency !== 'RUB' && <div className="sub">≈ <Money v={data.toRub(b, a.currency) ?? 0} round /></div>}
                     </div>
                   </button>
-                  <button className="icon-btn" aria-label={`Настроить счёт ${a.name}`} onClick={() => setEditAcc(a)}><Icon name="edit" size={18} /></button>
                 </div>
                 {(data.bondValue.get(a.id!) ?? 0) > 0 && (
                   <div className="muted small" style={{ margin: '-4px 0 4px 52px' }}>
@@ -93,7 +92,8 @@ export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFi
       ))}
       <button className="secondary" onClick={() => setEditAcc({ currency: 'RUB' })}>+ Добавить счёт</button>
 
-      {editAcc && <AccountSheet data={data} acc={editAcc} onClose={() => setEditAcc(null)} />}
+      {editAcc && <AccountSheet data={data} acc={editAcc} onClose={() => setEditAcc(null)}
+        onOpenOps={editAcc.id != null ? () => { setEditAcc(null); onOpenOps({ accountId: editAcc.id }) } : undefined} />}
       {editGoal && <GoalSheet data={data} goal={editGoal} onClose={() => setEditGoal(null)} />}
       {addBondTo != null && <AddBondSheet data={data} accountId={addBondTo} onClose={() => setAddBondTo(null)} />}
       {position && <PositionSheet data={data} position={position} onClose={() => setPosition(null)} />}
@@ -101,7 +101,7 @@ export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFi
   )
 }
 
-function AccountSheet({ data, acc, onClose }: { data: Data; acc: Partial<Account>; onClose: () => void }) {
+function AccountSheet({ data, acc, onClose, onOpenOps }: { data: Data; acc: Partial<Account>; onClose: () => void; onOpenOps?: () => void }) {
   const [name, setName] = useState(acc.name ?? '')
   const [currency, setCurrency] = useState<Currency>(acc.currency ?? 'RUB')
   // Вводится текущий баланс; начальный подбирается так, чтобы с учётом всех операций получилось именно это.
@@ -134,7 +134,10 @@ function AccountSheet({ data, acc, onClose }: { data: Data; acc: Partial<Account
   })
 
   return (
-    <Sheet title={acc.id ? 'Счёт' : 'Новый счёт'} onClose={onClose}>
+    <Sheet title={acc.id ? acc.name ?? 'Счёт' : 'Новый счёт'} onClose={onClose}>
+      {onOpenOps && (
+        <button className="pill-btn" style={{ marginTop: 0 }} onClick={onOpenOps}><Icon name="list" size={15} /> Операции счёта</button>
+      )}
       <label className="field-label">Название</label>
       <input value={name} onChange={e => setName(e.target.value)} placeholder="Т-Банк, Наличные, Накопительный…" autoFocus={!acc.id} />
       <label className="field-label">Валюта</label>
