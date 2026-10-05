@@ -130,11 +130,11 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
             <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Badge icon={categoryIcon(cat)} tone={cat!.bucket} size={34} /><strong>{cat!.name}</strong></span>
             <button className="link" onClick={() => setLimitOpen(true)}>{env.limit ? 'Изменить лимит' : 'Задать лимит'}</button>
           </div>
-          {env.limit + Math.max(0, env.carry) > 0 ? (
+          {env.limit > 0 ? (
             <>
-              <Bar value={env.spent} max={env.limit + Math.max(0, env.carry)} color={`var(--${cat!.bucket})`} />
+              <Bar value={env.spent} max={env.limit} color={`var(--${cat!.bucket})`} />
               <div className="muted small">
-                потрачено <Money v={env.spent} round /> из <Money v={env.limit + Math.max(0, env.carry)} round /> ·{' '}
+                потрачено <Money v={env.spent} round /> из <Money v={env.limit} round /> ·{' '}
                 <span className={env.available < 0 ? 'neg' : ''}>{env.available < 0 ? 'перерасход' : 'осталось'} <Money v={Math.abs(env.available)} round /></span>
               </div>
             </>

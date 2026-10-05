@@ -56,14 +56,14 @@ describe('конверты', () => {
   const limits: Limit[] = [{ categoryId: 3, month: '2026-09', amount: R(10000) }]
   const env = (txs: Tx[], month: string) => envelopes(cats, limits, txs, month).find(e => e.category.id === 3)!
 
-  it('переносит остаток на следующий месяц', () => {
+  it('каждый месяц конверт начинается заново: остаток не переносится', () => {
     const e = env([tx({ date: '2026-09-10', categoryId: 3, amount: R(7000), rub: R(7000) })], '2026-10')
-    expect(e).toMatchObject({ limit: R(10000), carry: R(3000), available: R(13000) })
+    expect(e).toMatchObject({ limit: R(10000), spent: 0, available: R(10000) })
   })
-  it('переносит и перерасход', () => {
-    const e = env([tx({ date: '2026-09-10', categoryId: 3, amount: R(12000), rub: R(12000) })], '2026-10')
-    expect(e.carry).toBe(R(-2000))
-    expect(e.available).toBe(R(8000))
+  it('и перерасход не переносится', () => {
+    const txs = [tx({ date: '2026-09-10', categoryId: 3, amount: R(12000), rub: R(12000) })]
+    expect(env(txs, '2026-09').available).toBe(R(-2000))
+    expect(env(txs, '2026-10').available).toBe(R(10000))
   })
   it('трата в подкатегории идёт в конверт родителя', () => {
     const e = envelopes(cats, [], [tx({ date: '2026-10-01', categoryId: 2, amount: R(30000), rub: R(30000) })], '2026-10')

@@ -92,14 +92,14 @@ export async function exportWorkbook(db: FinanceDB): Promise<ArrayBuffer> {
   if (firstMonth) {
     for (let m = firstMonth; m <= monthOf(todayISO()); m = shiftMonth(m, 1)) {
       for (const e of envelopes(categories, limits, txs, m)) {
-        if (!e.limit && !e.spent && !e.carry) continue
-        budgetRows.push([m, e.category.name, BUCKET_LABEL[e.category.bucket], toMajor(e.limit), toMajor(e.carry), toMajor(e.spent), toMajor(e.available)])
+        if (!e.limit && !e.spent) continue
+        budgetRows.push([m, e.category.name, BUCKET_LABEL[e.category.bucket], toMajor(e.limit), toMajor(e.spent), toMajor(e.available)])
       }
     }
   }
   addTable(wb, 'Бюджет', [
     { name: 'Месяц', width: 10 }, { name: 'Конверт', width: 22 }, { name: 'Тип', width: 12 },
-    { name: 'Лимит ₽', fmt: RUB_FMT }, { name: 'Перенос ₽', fmt: RUB_FMT }, { name: 'Потрачено ₽', fmt: RUB_FMT }, { name: 'Доступно ₽', fmt: RUB_FMT },
+    { name: 'Лимит ₽', fmt: RUB_FMT }, { name: 'Потрачено ₽', fmt: RUB_FMT }, { name: 'Доступно ₽', fmt: RUB_FMT },
   ], budgetRows)
 
   addTable(wb, 'Цели', [

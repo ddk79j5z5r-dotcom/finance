@@ -15,7 +15,7 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
 
   const buckets = bucketStates(data, month, data.settings)
   const envs = envelopes(data.categories, data.limits, data.txs, month)
-    .filter(e => e.limit || e.spent || e.carry || !e.category.system)
+    .filter(e => e.limit || e.spent || !e.category.system)
   const income = planIncome(data.txs, month, data.settings)
   const plan = envs.reduce((s, e) => s + e.limit, 0)
   const fact = envs.reduce((s, e) => s + e.spent, 0)
@@ -30,7 +30,7 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
   const paid = (r: Recurring) => isPaid(r, data.txs, month, x => data.toRub(x.amount, x.currency) ?? x.amount)
   // С лимитом — сверху, по доле израсходованного; без лимита — ниже, по сумме трат.
   const sorted = [...envs].sort((a, b) => {
-    const la = a.limit + Math.max(0, a.carry), lb = b.limit + Math.max(0, b.carry)
+    const la = a.limit, lb = b.limit
     if (!!la !== !!lb) return la ? -1 : 1
     return la ? b.spent / lb - a.spent / la : b.spent - a.spent
   })
@@ -87,7 +87,7 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
       <div className="section-title"><h3>Категории</h3><span className="muted small">нажми — траты и лимит</span></div>
       <div className="card tight">
         {sorted.map(e => {
-          const cap = e.limit + Math.max(0, e.carry)
+          const cap = e.limit
           return (
             <button className="row" key={e.category.id} onClick={() => onOpenOps({ categoryId: e.category.id, from: month, to: month })}>
               <Badge icon={categoryIcon(e.category)} tone={e.category.bucket} />
@@ -101,7 +101,6 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
                     <Bar value={e.spent} max={cap} color={`var(--${e.category.bucket})`} />
                     <div className={`small num ${e.available < 0 ? 'neg' : 'muted'}`}>
                       {e.available < 0 ? 'перерасход ' : 'осталось '}{formatMoney(Math.round(Math.abs(e.available) / 100) * 100)}
-                      {e.carry !== 0 && <span className="muted"> · перенос {e.carry > 0 ? '+' : '−'}{formatMoney(Math.round(Math.abs(e.carry) / 100) * 100)}</span>}
                     </div>
                   </>
                 ) : <div className="sub">лимит не задан</div>}
@@ -177,7 +176,7 @@ export function LimitSheet({ data, category, month, onClose }: { data: Data; cat
     <Sheet title={category.name} onClose={onClose}>
       <label className="field-label">Лимит в месяц начиная с «{monthLabel(month)}»</label>
       <AmountInput value={value} onChange={setValue} suffix="₽" autoFocus />
-      <p className="hint">Остаток и перерасход переносятся в этот же конверт на следующий месяц.</p>
+      <p className="hint">Лимит действует каждый месяц, пока не изменишь. Каждый месяц конверт начинается заново — остаток и перерасход не переносятся.</p>
       <button className="save" onClick={save}>Сохранить</button>
     </Sheet>
   )

@@ -66,33 +66,17 @@ export interface Envelope {
   category: Category
   limit: number
   spent: number
-  carry: number // перенос с прошлых месяцев (может быть отрицательным при перерасходе)
-  available: number // limit + carry - spent
+  available: number // limit − spent; каждый месяц конверт начинается заново, без переноса
 }
 
-/**
- * Состояние конвертов в месяце. Остаток (и перерасход) каждого месяца переносится
- * в тот же конверт, начиная с месяца, когда у конверта впервые появился лимит.
- */
+/** Состояние конвертов в месяце. Лимит действует, пока не изменён; остаток и перерасход в следующий месяц не переходят. */
 export function envelopes(categories: Category[], limits: Limit[], txs: Tx[], month: string): Envelope[] {
   const roots = categories.filter(c => c.parentId == null && !c.archived)
-  const spentCache = new Map<string, Map<number, number>>()
-  const spentIn = (m: string) => {
-    if (!spentCache.has(m)) spentCache.set(m, spentByEnvelope(categories, txs, m))
-    return spentCache.get(m)!
-  }
+  const spent = spentByEnvelope(categories, txs, month)
   return roots.map(category => {
-    const id = category.id!
-    const first = limits.filter(l => l.categoryId === id).map(l => l.month).sort()[0]
-    let carry = 0
-    if (first) {
-      for (let m = first; m < month; m = shiftMonth(m, 1)) {
-        carry += limitFor(limits, id, m) - (spentIn(m).get(id) ?? 0)
-      }
-    }
-    const limit = limitFor(limits, id, month)
-    const spent = spentIn(month).get(id) ?? 0
-    return { category, limit, spent, carry, available: limit + carry - spent }
+    const limit = limitFor(limits, category.id!, month)
+    const s = spent.get(category.id!) ?? 0
+    return { category, limit, spent: s, available: limit - s }
   })
 }
 
