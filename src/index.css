@@ -540,3 +540,21 @@ h3 { font-weight: 600; }
 .tone-dot-inline.tone-needs { background: var(--needs); }
 .tone-dot-inline.tone-wants { background: var(--wants); }
 .tone-dot-inline.tone-savings { background: var(--savings); }
+
+/* ---------- Окна над клавиатурой iOS ---------- */
+/* Подложка окна совпадает с видимой областью (над клавиатурой), окно прижато к её низу. */
+.sheet-backdrop {
+  top: var(--vvtop, 0px);
+  bottom: auto;
+  height: var(--vvh, 100dvh);
+}
+.sheet { max-height: calc(var(--vvh, 100dvh) - 12px); }
+.sheet.full { height: var(--vvh, 100dvh); max-height: var(--vvh, 100dvh); }
+/* Пока открыта клавиатура: окно — на всю видимую высоту и без нижнего отступа под «домой»,
+   своя цифровая клавиатура ввода суммы прячется, чтобы не занимать место. */
+.kb-open .sheet { padding-bottom: 0; }
+.kb-open .sheet-body { padding-bottom: 12px; }
+.kb-open .keypad { display: none; }
+.kb-open .tabs { display: none; }
+/* Экран блокировки — тоже по видимой области, чтобы поле PIN не уходило под клавиатуру. */
+.lock { min-height: var(--vvh, 100dvh); }
