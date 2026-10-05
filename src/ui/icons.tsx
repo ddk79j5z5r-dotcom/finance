@@ -87,11 +87,12 @@ export const INCOME_ICON: Record<IncomeKind, IconName> = {
   salary: 'banknote', advance: 'banknote', bonus: 'star', interest: 'percent', gift: 'users', other: 'income',
 }
 
-/** Круглая плашка с иконкой; цвет — по типу (нужды / желания / сбережения / доход / перевод). */
+/** Тонкая иконка с маленькой цветной точкой типа (нужды / желания / сбережения / доход / перевод). */
 export function Badge({ icon, tone, size = 40 }: { icon: IconName; tone: Bucket | 'income' | 'transfer'; size?: number }) {
   return (
-    <span className={`badge tone-${tone}`} style={{ width: size, height: size }}>
-      <Icon name={icon} size={Math.round(size * 0.5)} />
+    <span className="thin-ico" style={{ width: size, height: size }}>
+      <Icon name={icon} size={Math.round(size * 0.58)} stroke={1.6} />
+      <i className={`tone-dot tone-${tone}`} />
     </span>
   )
 }

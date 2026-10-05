@@ -1,14 +1,13 @@
-import { bucketStates, monthAverage, monthForecast, monthTotals, netChangeSince, savingsRate, setupSteps, upcoming, type PlannedEvent, type SetupStep } from '../domain/calc'
-import { saveSettings } from '../db'
+import { monthForecast, monthTotals, netChangeSince, savingsRate, upcoming, type PlannedEvent } from '../domain/calc'
 import { bondEvents, type BondEvent } from '../domain/bonds'
 import { BondEventSheet } from './Bonds'
 import { useState } from 'react'
 import { AccountDot } from './AccountBadge'
 import { formatMoney, monthOf, todayISO } from '../domain/money'
-import { BUCKET_LABEL, BUCKETS, INCOME_LABEL, type Tx } from '../domain/types'
-import { Bar, Money, setAmountsHidden, useAmountsHidden } from './common'
-import { activeAccounts, txView, type Data } from './data'
-import { Badge, categoryIcon, Icon } from './icons'
+import { INCOME_LABEL, type Bucket, type Tx } from '../domain/types'
+import { Money, setAmountsHidden, useAmountsHidden } from './common'
+import { activeAccounts, type Data } from './data'
+import { Badge, categoryIcon, Icon, type IconName } from './icons'
 
 const shortDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
 
@@ -18,16 +17,14 @@ function inDays(date: string, today: string) {
   return n === 0 ? 'сегодня' : n === 1 ? 'завтра' : `через ${n} дн.`
 }
 
-export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenBackup, onOpenTx, onOpenAccounts, onOpenAnalytics, onOpenSetup }: {
+export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenBackup, onOpenAccounts, onOpenAnalytics }: {
   data: Data
   onDistribute: (t: Tx) => void
   onOpenBudget: () => void
   onOpenCalendar: () => void
   onOpenBackup: () => void
-  onOpenTx: (t: Tx) => void
   onOpenAccounts: () => void
   onOpenAnalytics: (mode: 'income' | 'expense') => void
-  onOpenSetup: (step: SetupStep) => void
 }) {
   const hidden = useAmountsHidden()
   const today = todayISO()
@@ -37,206 +34,108 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
   // Под балансом — счета с галочкой «на главной»; если не отмечен ни один — основной счёт.
   const flagged = accounts.filter(a => a.showOnHome)
   const homeAccounts = flagged.length ? flagged : accounts.filter(a => a.id === data.settings.defaultAccountId)
-  const steps = setupSteps(data, data.lockEnabled)
-  const stepsDone = steps.filter(x => x.done).length
   const since = new Date(); since.setDate(since.getDate() - 29)
   const delta = netChangeSince(data.txs, todayISO(since))
   const totals = monthTotals(data.txs, month)
-  const avg = monthAverage(data.txs, month)
-  const buckets = bucketStates(data, month, data.settings)
   const in31 = new Date(); in31.setDate(in31.getDate() + 31)
   const items: ({ date: string; plan: PlannedEvent } | { date: string; bond: BondEvent })[] = [
     ...upcoming(data.recurring, data.settings, today, 31).map(plan => ({ date: plan.date, plan })),
     ...bondEvents(data.trades, data.bonds, today, todayISO(in31), data.taxFree).map(bond => ({ date: bond.date, bond })),
-  ].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6)
+  ].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 3)
   const [bondEvent, setBondEvent] = useState<BondEvent | null>(null)
   const allocated = new Set(data.allocations.map(a => a.txId))
   const pending = data.txs.filter(t => t.type === 'income' && monthOf(t.date) === month && !allocated.has(t.id!))
-  // Пока бэкапа не было, о нём напоминает карточка настройки; баннер — когда бэкап устарел (или карточку скрыли).
   const exportStale = data.txs.length > 0 && (data.settings.lastExportAt
     ? Date.now() - data.settings.lastExportAt > 7 * 864e5
     : !!data.settings.setupDismissed)
   const forecast = monthForecast(data, data.settings, today, r => data.toRub(r.amount, r.currency) ?? r.amount)
   const rate = savingsRate({ income: forecast.income, expense: forecast.expense })
-  const overspent = totals.expense - totals.income
-  const recent = [...data.txs].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt).slice(0, 4)
 
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          <div className="muted small">{new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-          <h1>Финансы</h1>
-        </div>
+    <div className="page air">
+      <div className="air-head">
+        <span>{new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+        <button className="icon-btn" aria-label={hidden ? 'Показать суммы' : 'Скрыть суммы'} onClick={() => setAmountsHidden(!hidden)}>
+          <Icon name={hidden ? 'eyeOff' : 'eye'} size={20} stroke={1.6} />
+        </button>
       </div>
 
-      {pending.map(t => (
-        <button className="banner accent-b" key={t.id} onClick={() => onDistribute(t)}>
-          <Badge icon="banknote" tone="income" size={34} />
-          <span className="body">Пришло: {INCOME_LABEL[t.incomeKind!].toLowerCase()} <strong><Money v={t.rub} /></strong>. Распределить?</span>
-          <Icon name="right" size={18} />
-        </button>
-      ))}
-      {data.pendingBond.slice(0, 3).map(ev => (
-        <button className="banner accent-b" key={ev.key} onClick={() => setBondEvent(ev)}>
-          <Badge icon="percent" tone="income" size={34} />
-          <span className="body">
-            {ev.kind === 'coupon' ? 'Купон' : 'Погашение'} {ev.shortName}{ev.amount != null && <> — <strong><Money v={ev.amount} round /></strong></>}. Записать?
-          </span>
-          <Icon name="right" size={18} />
-        </button>
-      ))}
-      {data.pendingBond.length > 3 && <p className="hint">И ещё {data.pendingBond.length - 3} событий по облигациям — после этих появятся следующие.</p>}
-      {exportStale && (
-        <button className="banner warn-b" onClick={onOpenBackup}>
-          <span className="badge" style={{ width: 34, height: 34, color: 'var(--warn)' }}><Icon name="download" size={18} /></span>
-          <span className="body">{data.settings.lastExportAt ? 'Бэкапа не было больше недели' : 'Бэкап ещё не делался'} — сохрани Excel в iCloud</span>
-          <Icon name="right" size={18} />
-        </button>
-      )}
-
-      <div className="card hero">
-        <div className="label">
-          <span>Общий баланс</span>
-          <span style={{ flex: 1 }} />
-          <button className="link" onClick={onOpenAccounts}>Все счета</button>
-          <button className="icon-btn" aria-label={hidden ? 'Показать суммы' : 'Скрыть суммы'} onClick={() => setAmountsHidden(!hidden)}>
-            <Icon name={hidden ? 'eyeOff' : 'eye'} size={20} />
-          </button>
-        </div>
-        <div className="big"><Money v={total} round /></div>
+      <div className="air-balance glass">
+        <span className="k">Общий баланс</span>
+        <span className="big"><Money v={total} round /></span>
         {!hidden && delta !== 0 && (
-          <div className={`delta ${delta > 0 ? 'pos' : 'neg'}`}>
-            {delta > 0 ? '↑' : '↓'} {formatMoney(Math.round(Math.abs(delta) / 100) * 100)} за 30 дней
-          </div>
+          <span className={`delta ${delta > 0 ? 'pos' : 'neg'}`}>{delta > 0 ? '↑' : '↓'} {formatMoney(Math.round(Math.abs(delta) / 100) * 100)} за 30 дней</span>
         )}
-        {homeAccounts.length > 0 && (
-          <button className="acc-mini" onClick={onOpenAccounts} aria-label="Открыть все счета">
-            {homeAccounts.map(a => (
-              <span className="line" key={a.id}>
-                <span className="n" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><AccountDot color={data.colorOf(a)} />{a.name}</span>
-                <span className="num"><Money v={data.value.get(a.id!) ?? 0} cur={a.currency} round /></span>
-              </span>
-            ))}
-          </button>
-        )}
-        <div className="tiles">
-          <button className="tile" onClick={() => onOpenAnalytics('income')}>
-            <div className="k">Доходы за месяц</div>
-            <div className="v pos"><Money v={totals.income} round /></div>
-            {avg && !hidden && <div className="muted small">ср. {formatMoney(Math.round(avg.income / 100) * 100)}</div>}
-          </button>
-          <button className="tile" onClick={() => onOpenAnalytics('expense')}>
-            <div className="k">Расходы за месяц</div>
-            <div className="v neg"><Money v={totals.expense} round /></div>
-            {avg && !hidden && <div className="muted small">ср. {formatMoney(Math.round(avg.expense / 100) * 100)}</div>}
-          </button>
-        </div>
+        {homeAccounts.map(a => (
+          <span className="air-acc" key={a.id}>
+            <AccountDot color={data.colorOf(a)} /><span className="n">{a.name}</span>
+            <span className="num"><Money v={data.value.get(a.id!) ?? 0} cur={a.currency} round /></span>
+          </span>
+        ))}
+        <button className="pill-btn" onClick={onOpenAccounts}>Все счета <Icon name="right" size={14} /></button>
       </div>
 
-      {!data.settings.setupDismissed && stepsDone < steps.length && (
-        <div className="card setup">
-          <div className="line" style={{ paddingTop: 0 }}>
-            <h3>Настрой приложение · {stepsDone} из {steps.length}</h3>
-            <button className="icon-btn" aria-label="Скрыть" onClick={() => saveSettings({ setupDismissed: true })}><Icon name="close" size={18} /></button>
-          </div>
-          <Bar value={stepsDone} max={steps.length} color="var(--accent)" />
-          {steps.map(st => (
-            <button key={st.id} className={`setup-step ${st.done ? 'done' : ''}`} disabled={st.done} onClick={() => onOpenSetup(st.id)}>
-              <span className="check-circle">{st.done && <Icon name="check" size={14} />}</span>
-              <span className="body">{st.label}</span>
-              {!st.done && <Icon name="right" size={16} />}
+      {(pending.length > 0 || data.pendingBond.length > 0 || exportStale) && (
+        <div className="air-notices glass">
+          {pending.map(t => (
+            <button className="air-notice" key={t.id} onClick={() => onDistribute(t)}>
+              <span>Пришло: {INCOME_LABEL[t.incomeKind!].toLowerCase()} <Money v={t.rub} round /> — распределить</span><Icon name="right" size={16} />
             </button>
           ))}
-        </div>
-      )}
-
-      {(totals.income > 0 || totals.expense > 0) && (
-        <div className={`card ${forecast.balance < 0 ? 'alert-card' : ''}`}>
-          <div className="line" style={{ paddingTop: 0 }}>
-            <h3>Прогноз месяца</h3>
-            {rate != null && <span className={`pill ${rate < 0 ? 'neg' : rate < 0.1 ? 'warn-t' : 'pos'}`}>сбережения ≈ {Math.round(rate * 100)}%</span>}
-          </div>
-          {forecast.balance < 0 ? (
-            <div className="line" style={{ alignItems: 'flex-start' }}>
-              <span className="neg" style={{ display: 'flex', gap: 8 }}><Icon name="alert" size={20} /> При таком темпе месяц закончится в минусе</span>
-              <strong className="neg num"><Money v={forecast.balance} round /></strong>
-            </div>
-          ) : (
-            <div className="line"><span>К концу месяца останется</span><strong className="pos num"><Money v={forecast.balance} round /></strong></div>
-          )}
-          <div className="muted small">
-            доходы ≈ <Money v={forecast.income} round /> · расходы ≈ <Money v={forecast.expense} round />
-            {forecast.fixedLeft > 0 && <> · ещё платежей <Money v={forecast.fixedLeft} round /></>}
-          </div>
-          {overspent > 0 && totals.income > 0 && (
-            <p className="warn">Расходы уже больше доходов месяца на <Money v={overspent} round /></p>
-          )}
-          {forecast.balance < 0 && !hidden && (
-            <p className="hint" style={{ marginBottom: 0 }}>
-              Чтобы выйти в ноль, переменные траты за месяц (без регулярных платежей) должны уложиться в ≈ {formatMoney(Math.max(0, Math.round((forecast.variablePace + forecast.balance) / 100) * 100))} — сейчас темп ≈ {formatMoney(Math.round(forecast.variablePace / 100) * 100)}.
-            </p>
+          {data.pendingBond.slice(0, 3).map(ev => (
+            <button className="air-notice" key={ev.key} onClick={() => setBondEvent(ev)}>
+              <span>{ev.kind === 'coupon' ? 'Купон' : 'Погашение'} {ev.shortName}{ev.amount != null && <> — <Money v={ev.amount} round /></>} — записать</span><Icon name="right" size={16} />
+            </button>
+          ))}
+          {exportStale && (
+            <button className="air-notice warn" onClick={onOpenBackup}>
+              <span>{data.settings.lastExportAt ? 'Бэкапа не было больше недели' : 'Бэкап ещё не делался'}</span><Icon name="right" size={16} />
+            </button>
           )}
         </div>
       )}
 
-      <button className="card" style={{ display: 'block', width: '100%' }} onClick={onOpenBudget}>
-        <div className="line" style={{ paddingTop: 0 }}>
-          <h3>План месяца</h3>
-          <span className="muted small">{data.settings.rule.needs}/{data.settings.rule.wants}/{data.settings.rule.savings}</span>
+      <div className="air-section glass">
+        <div className="air-stats">
+          <button onClick={() => onOpenAnalytics('income')}>
+            <span className="k">Доходы</span><span className="v pos"><Money v={totals.income} round /></span>
+          </button>
+          <button onClick={() => onOpenAnalytics('expense')}>
+            <span className="k">Расходы</span><span className="v neg"><Money v={totals.expense} round /></span>
+          </button>
         </div>
-        {BUCKETS.map(b => {
-          const s = buckets[b]
-          return (
-            <div key={b} style={{ marginTop: 8 }}>
-              <div className="line small" style={{ padding: 0 }}>
-                <span>{BUCKET_LABEL[b]}</span>
-                <span className="num"><Money v={s.spent} round /> <span className="muted">/ <Money v={s.target} round /></span></span>
-              </div>
-              <Bar value={s.spent} max={s.target} color={`var(--${b})`} />
-            </div>
-          )
-        })}
-      </button>
-
-      <div className="section-title">
-        <h3>Ближайшие платежи</h3>
-        <button className="link" onClick={onOpenCalendar}>Все</button>
+        {(totals.income > 0 || totals.expense > 0) && (
+          <button className={`air-forecast ${forecast.balance < 0 ? 'bad' : ''}`} onClick={onOpenBudget}>
+            <span>
+              {forecast.balance < 0 ? 'Месяц уходит в минус' : 'К концу месяца останется'}{' '}
+              <strong className={forecast.balance < 0 ? 'neg' : ''}>≈ <Money v={forecast.balance} round /></strong>
+            </span>
+            {rate != null && <span className="muted">сбережения ≈ {Math.round(rate * 100)}%</span>}
+          </button>
+        )}
       </div>
-      <div className="card tight">
+
+      <div className="air-section glass tight">
+        <div className="air-title" style={{ paddingTop: 12 }}><span>Ближайшие платежи</span><button className="link" onClick={onOpenCalendar}>Все</button></div>
         {items.length === 0 && <p className="hint">Добавь аренду и кредит в «Ещё → Регулярные платежи».</p>}
-        {items.map((it, i) => 'plan' in it ? <EventRow key={i} e={it.plan} data={data} today={today} /> : <BondEventRow key={i} e={it.bond} today={today} />)}
+        <div className="air-list">
+          {items.map((it, i) => 'plan' in it ? <EventRow key={i} e={it.plan} data={data} today={today} thin /> : <BondEventRow key={i} e={it.bond} today={today} thin />)}
+        </div>
       </div>
-
-      {recent.length > 0 && (
-        <>
-          <div className="section-title"><h3>Последние операции</h3></div>
-          <div className="card tight">
-            {recent.map(t => {
-              const v = txView(data, t)
-              const acc = data.accounts.find(a => a.id === t.accountId)
-              return (
-                <button className="row" key={t.id} onClick={() => onOpenTx(t)}>
-                  <Badge icon={v.icon} tone={v.tone} />
-                  <div className="body"><div className="title">{v.title}</div><div className="sub">{v.sub}</div></div>
-                  <div className={`amt ${t.type === 'income' ? 'pos' : ''}`}>
-                    {t.type === 'expense' ? '−' : t.type === 'income' ? '+' : ''}<Money v={t.amount} cur={acc?.currency} />
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </>
-      )}
       {bondEvent && <BondEventSheet data={data} event={bondEvent} onClose={() => setBondEvent(null)} />}
     </div>
   )
 }
 
-export function BondEventRow({ e, today }: { e: BondEvent; today: string }) {
+function Lead({ icon, tone, thin }: { icon: IconName; tone: Bucket | 'income' | 'transfer'; thin?: boolean }) {
+  if (!thin) return <Badge icon={icon} tone={tone} />
+  return <span className="thin-ico"><Icon name={icon} size={22} stroke={1.6} /><i className={`tone-dot tone-${tone}`} /></span>
+}
+
+export function BondEventRow({ e, today, thin }: { e: BondEvent; today: string; thin?: boolean }) {
   return (
     <div className="row">
-      <Badge icon="percent" tone="income" />
+      <Lead icon="percent" tone="income" thin={thin} />
       <div className="body">
         <div className="title">{e.kind === 'coupon' ? 'Купон' : 'Погашение'} {e.shortName}</div>
         <div className="sub">{[shortDate(e.date), inDays(e.date, today), `${e.qty} шт.`].filter(Boolean).join(' · ')}</div>
@@ -246,14 +145,14 @@ export function BondEventRow({ e, today }: { e: BondEvent; today: string }) {
   )
 }
 
-export function EventRow({ e, data, today }: { e: PlannedEvent; data: Data; today: string }) {
+export function EventRow({ e, data, today, thin }: { e: PlannedEvent; data: Data; today: string; thin?: boolean }) {
   if (e.kind === 'payment') {
     const r = e.recurring
     const cat = data.categories.find(c => c.id === r.categoryId)
     const root = cat?.parentId != null ? data.categories.find(c => c.id === cat.parentId) : cat
     return (
       <div className="row">
-        <Badge icon={categoryIcon(root)} tone={root?.bucket ?? 'needs'} />
+        <Lead icon={categoryIcon(root)} tone={cat?.bucket ?? root?.bucket ?? 'needs'} thin={thin} />
         <div className="body">
           <div className="title">{r.name}</div>
           <div className="sub">{[shortDate(e.date), inDays(e.date, today)].filter(Boolean).join(' · ')}</div>
@@ -264,7 +163,7 @@ export function EventRow({ e, data, today }: { e: PlannedEvent; data: Data; toda
   }
   return (
     <div className="row">
-      <Badge icon="banknote" tone="income" />
+      <Lead icon="banknote" tone="income" thin={thin} />
       <div className="body">
         <div className="title">{e.kind === 'salary' ? 'Зарплата' : 'Аванс'}</div>
         <div className="sub">{[shortDate(e.date), inDays(e.date, today)].filter(Boolean).join(' · ')}</div>

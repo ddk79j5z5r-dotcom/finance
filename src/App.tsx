@@ -34,7 +34,6 @@ export default function App() {
   const [analyticsMode, setAnalyticsMode] = useState<Mode>('expense')
   const [section, setSection] = useState<MoreSection | null>(null)
   const [adding, setAdding] = useState(false)
-  const [editTx, setEditTx] = useState<Tx | null>(null)
   const [lock, setLock] = useState<LockRow | null>(null)
   const [locked, setLocked] = useState(true)
   const [opsFilter, setOpsFilter] = useState<OpsFilter>({})
@@ -63,7 +62,6 @@ export default function App() {
 
   function onSaved(tx: Tx) {
     setAdding(false)
-    setEditTx(null)
     if (tx.type === 'income') setDistribute(tx)
     notify('Сохранено')
   }
@@ -75,9 +73,8 @@ export default function App() {
       <main>
         {tab === 'home' && (
           <Home data={data} onDistribute={setDistribute} onOpenBudget={() => setTab('budget')}
-            onOpenCalendar={() => openMore('calendar')} onOpenBackup={() => openMore(null, 'backup')} onOpenTx={setEditTx} onOpenAccounts={() => openMore('accounts')}
-            onOpenAnalytics={m => { setAnalyticsMode(m); openMore('analytics') }}
-            onOpenSetup={step => (step === 'goals' ? openMore('accounts') : openMore(null, step))} />
+            onOpenCalendar={() => openMore('calendar')} onOpenBackup={() => openMore(null, 'backup')} onOpenAccounts={() => openMore('accounts')}
+            onOpenAnalytics={m => { setAnalyticsMode(m); openMore('analytics') }} />
         )}
         {tab === 'history' && <History data={data} filter={opsFilter} setFilter={setOpsFilter} />}
         {tab === 'budget' && <Budget data={data} onDistribute={setDistribute} onOpenOps={openOps} />}
@@ -105,11 +102,6 @@ export default function App() {
       {adding && (
         <Sheet title="Новая операция" full onClose={() => setAdding(false)}>
           <Entry data={data} onSaved={onSaved} />
-        </Sheet>
-      )}
-      {editTx && (
-        <Sheet title="Операция" onClose={() => setEditTx(null)}>
-          <Entry data={data} tx={editTx} onSaved={onSaved} />
         </Sheet>
       )}
       {distribute && <Distribute data={data} tx={distribute} onClose={() => setDistribute(null)} />}

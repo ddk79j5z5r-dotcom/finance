@@ -3,7 +3,8 @@ import { db, saveSettings } from '../db'
 import { refreshLatestRate } from '../domain/rates'
 import { BUCKET_LABEL, BUCKETS, CURRENCIES, type Bucket, type Category, type Currency, type Recurring } from '../domain/types'
 import { disableLock, enrollFaceId, faceIdSupported, getLock, isLockEnabled, setPin } from '../lock'
-import { AmountInput, Chips, CUR_SUFFIX, fromInput, Money, Sheet, toInput, useOnce } from './common'
+import { AmountInput, Bar, Chips, CUR_SUFFIX, fromInput, Money, Sheet, toInput, useOnce } from './common'
+import { setupSteps } from '../domain/calc'
 import { childrenOf, rateHint, rootCategories, type Data } from './data'
 import { Icon, type IconName } from './icons'
 import { ImportCk } from './ImportCk'
@@ -34,9 +35,28 @@ export function More({ data, section, setSection, onOpenPage }: {
 }) {
   const [refreshing, setRefreshing] = useState(false)
   const r = data.latestRate
+  const steps = setupSteps(data, data.lockEnabled)
+  const stepsDone = steps.filter(x => x.done).length
   return (
     <div className="page">
       <div className="page-head"><h1>Ещё</h1></div>
+      {!data.settings.setupDismissed && stepsDone < steps.length && (
+        <div className="card setup">
+          <div className="line" style={{ paddingTop: 0 }}>
+            <h3>Настрой приложение · {stepsDone} из {steps.length}</h3>
+            <button className="icon-btn" aria-label="Скрыть" onClick={() => saveSettings({ setupDismissed: true })}><Icon name="close" size={18} /></button>
+          </div>
+          <Bar value={stepsDone} max={steps.length} color="var(--accent)" />
+          {steps.map(st => (
+            <button key={st.id} className={`setup-step ${st.done ? 'done' : ''}`} disabled={st.done}
+              onClick={() => (st.id === 'goals' ? onOpenPage('accounts') : setSection(st.id))}>
+              <span className="check-circle">{st.done && <Icon name="check" size={14} />}</span>
+              <span className="body">{st.label}</span>
+              {!st.done && <Icon name="right" size={16} />}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="big-tiles">
         {PAGES.map(p => (
           <button className="big-tile" key={p.id} onClick={() => onOpenPage(p.id)}>

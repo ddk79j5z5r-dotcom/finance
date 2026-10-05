@@ -51,15 +51,27 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
 
       <div className="card">
         <div className="muted small">План расходов</div>
-        <div className="line" style={{ padding: '2px 0' }}>
-          <span style={{ fontSize: 26, fontWeight: 750, letterSpacing: '-0.02em' }}><Money v={plan} round /></span>
-          <span className="pct">{plan ? Math.round((fact / plan) * 100) : 0}%</span>
-        </div>
-        <Bar value={fact} max={plan} thick color="var(--pos)" />
-        <div className="line small">
-          <span>Факт <strong className="num"><Money v={fact} round /></strong></span>
-          <span className="muted">{plan >= fact ? 'Осталось ' : 'Перерасход '}<strong className={plan >= fact ? '' : 'neg'}><Money v={Math.abs(plan - fact)} round /></strong></span>
-        </div>
+        {plan > 0 ? (
+          <>
+            <div className="line" style={{ padding: '2px 0' }}>
+              <span style={{ fontSize: 26, fontWeight: 650, letterSpacing: '-0.02em' }}><Money v={plan} round /></span>
+              <span className="pct">{Math.round((fact / plan) * 100)}%</span>
+            </div>
+            <Bar value={fact} max={plan} thick color="var(--pos)" />
+            <div className="line small">
+              <span>Факт <strong className="num"><Money v={fact} round /></strong></span>
+              <span className="muted">{plan >= fact ? 'Осталось ' : 'Перерасход '}<strong className={plan >= fact ? '' : 'neg'}><Money v={Math.abs(plan - fact)} round /></strong></span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="line" style={{ padding: '2px 0' }}>
+              <span style={{ fontSize: 26, fontWeight: 650, letterSpacing: '-0.02em' }}><Money v={fact} round /></span>
+              <span className="muted small">потрачено</span>
+            </div>
+            <p className="hint" style={{ marginBottom: 0 }}>Лимиты не заданы — нажми на категорию ниже, чтобы задать.</p>
+          </>
+        )}
       </div>
 
       <div className="card">

@@ -26,6 +26,14 @@
   --transfer: #677080;
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s-other: #9aa1ab;
   --shadow: 0 1px 2px rgba(17, 20, 24, 0.05), 0 4px 14px rgba(17, 20, 24, 0.05);
+  --glass: rgba(255, 255, 255, 0.58);
+  --glass-strong: rgba(255, 255, 255, 0.78);
+  --glass-line: rgba(255, 255, 255, 0.7);
+  --glass-hi: rgba(255, 255, 255, 0.9);
+  --glass-shadow: 0 10px 30px rgba(30, 60, 50, 0.08);
+  --blob-1: rgba(47, 191, 113, 0.22);
+  --blob-2: rgba(56, 189, 248, 0.16);
+  --blob-3: rgba(167, 139, 250, 0.12);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -55,6 +63,14 @@
     --transfer: #8c949e;
     --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s-other: #59616b;
     --shadow: none;
+    --glass: rgba(255, 255, 255, 0.055);
+    --glass-strong: rgba(30, 33, 38, 0.72);
+    --glass-line: rgba(255, 255, 255, 0.09);
+    --glass-hi: rgba(255, 255, 255, 0.07);
+    --glass-shadow: 0 12px 34px rgba(0, 0, 0, 0.35);
+    --blob-1: rgba(47, 191, 113, 0.30);
+    --blob-2: rgba(45, 140, 200, 0.22);
+    --blob-3: rgba(139, 92, 246, 0.16);
   }
 }
 
@@ -367,3 +383,154 @@ h3 { font-size: 17px; margin: 0; font-weight: 650; }
 .acc-bar.on { outline: 3px solid var(--text); outline-offset: 2px; }
 .acc-bar:not(.acc-yellow) { color: #fff; }
 .acc-pick.empty .v { color: var(--accent); }
+
+/* ---------- «Воздух»: минималистичная главная ---------- */
+.air { padding-top: calc(env(safe-area-inset-top) + 14px); }
+.air-head { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 15px; margin-bottom: 6px; }
+.air-head span::first-letter { text-transform: uppercase; }
+.air-balance { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 4px 0 22px; text-align: left; }
+.air-balance .k { color: var(--muted); font-size: 15px; }
+.air-balance .big { font-size: 44px; font-weight: 600; letter-spacing: -0.035em; line-height: 1.1; margin: 2px 0 4px; }
+.air-balance .delta { font-size: 14px; font-weight: 500; }
+.air-acc { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 14px; font-size: 16px; color: var(--text-2); }
+.air-acc .n { flex: 1; }
+.air-acc .num { color: var(--text); }
+
+.air-notices { display: flex; flex-direction: column; margin: 0 0 22px; border-top: 1px solid var(--line); }
+.air-notice { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 0; border-bottom: 1px solid var(--line); font-size: 15px; color: var(--text); text-align: left; }
+.air-notice::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
+.air-notice > span { flex: 1; }
+.air-notice svg { color: var(--muted); }
+.air-notice.warn::before { background: var(--warn); }
+
+.air-section { margin-bottom: 28px; }
+.air-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.air-stats button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; }
+.air-stats .k { font-size: 14px; color: var(--muted); }
+.air-stats .v { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
+.air-forecast { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 14px 0 0; font-size: 15px; color: var(--text-2); text-align: left; }
+.air-forecast strong { color: var(--text); font-weight: 600; }
+.air-forecast .muted { font-size: 14px; }
+
+.air-title { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.air-title .link { text-transform: none; letter-spacing: 0; }
+.air-list .row { padding: 12px 0; min-height: 52px; }
+.air-list .row + .row { border-top: 1px solid var(--line); }
+.air-list .row .title { font-weight: 500; }
+.air-list .row .amt { font-weight: 500; }
+
+.thin-ico { position: relative; flex: none; width: 36px; height: 36px; display: grid; place-items: center; color: var(--text-2); }
+.tone-dot { position: absolute; right: 2px; bottom: 3px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--bg); }
+.tone-dot.tone-needs { background: var(--needs); }
+.tone-dot.tone-wants { background: var(--wants); }
+.tone-dot.tone-savings { background: var(--savings); }
+.tone-dot.tone-income { background: var(--income); }
+.tone-dot.tone-transfer { background: var(--transfer); }
+.row > span.thin-ico:first-child { flex: none; }
+
+
+/* ---------- Стекло ---------- */
+/* Мягкие цветные пятна за интерфейсом — без них размытию нечего показывать. */
+.app::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(60% 40% at 10% 0%, var(--blob-1), transparent 70%),
+    radial-gradient(50% 35% at 100% 30%, var(--blob-2), transparent 70%),
+    radial-gradient(60% 40% at 30% 100%, var(--blob-3), transparent 70%),
+    var(--bg);
+}
+body { background: var(--bg); }
+.app { position: relative; z-index: 0; }
+
+.glass {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid var(--glass-line);
+  border-radius: 26px;
+  box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow);
+  padding: 18px;
+  margin-bottom: 14px;
+}
+.glass.tight { padding: 6px 18px; }
+
+/* Главная в стекле */
+.air .air-balance.glass { padding: 18px; }
+.air .air-section.glass { margin-bottom: 14px; }
+.air .air-stats { border: 0; padding: 0 0 14px; border-bottom: 1px solid var(--line); }
+.air .air-forecast { padding-top: 12px; }
+.air .air-notices.glass { border-top: 0; padding: 2px 18px; }
+.air .air-notices.glass .air-notice:last-child { border-bottom: 0; }
+.air .air-title { padding: 2px 0 2px; }
+.air .air-list .row + .row { border-top: 1px solid var(--line); }
+.thin-ico .tone-dot { border-color: transparent; }
+
+/* Парящая стеклянная нижняя панель */
+.tabs {
+  left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom));
+  border-radius: 28px; padding: 6px 4px;
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--glass-line);
+  box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow);
+}
+.tabs .fab { margin-top: -22px; border-radius: 22px; }
+.app { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+
+/* ---------- Стекло во всём приложении ---------- */
+:root { --fill: rgba(17, 20, 24, 0.05); --fill-strong: rgba(255, 255, 255, 0.75); }
+@media (prefers-color-scheme: dark) {
+  :root { --fill: rgba(255, 255, 255, 0.07); --fill-strong: rgba(255, 255, 255, 0.09); }
+}
+/* Полупрозрачные поля, чипы, переключатели — поверх стекла. */
+:root { --card-2: var(--fill); }
+
+/* Карточки и плашки: стекло без размытия (фон неподвижный, размытие дорого на длинных списках). */
+.card, .month-nav, .big-tile, .acc-pick, .banner, .glass {
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow);
+  border-radius: 24px;
+}
+.glass { -webkit-backdrop-filter: none; backdrop-filter: none; }
+.card { padding: 18px; }
+.card.tight { padding: 4px 18px; }
+.month-nav { border-radius: 20px; }
+.acc-pick { border-radius: 20px; }
+
+/* Окна снизу и экраны поверх — матовое стекло с размытием. */
+.sheet-backdrop { background: rgba(0, 0, 0, 0.35); }
+.sheet {
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: blur(30px) saturate(170%);
+  backdrop-filter: blur(30px) saturate(170%);
+  border: 1px solid var(--glass-line); border-bottom: 0;
+  border-radius: 28px 28px 0 0;
+}
+.sheet.full { border-radius: 0; }
+.keypad { background: transparent; border-top-color: var(--glass-line); }
+.key { background: var(--fill-strong); box-shadow: none; }
+.key.op { background: var(--fill); }
+.segmented { background: var(--fill); border-radius: 14px; }
+.segmented button { border-radius: 11px; }
+.segmented button.on { background: var(--fill-strong); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+@media (prefers-color-scheme: dark) { .segmented button.on { background: rgba(255,255,255,.14); } }
+.chip { background: var(--fill); }
+input, select { background: var(--fill); }
+.toast { background: var(--glass-strong); color: var(--text); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border: 1px solid var(--glass-line); }
+
+/* Легче шрифты */
+h1 { font-weight: 650; }
+h3 { font-weight: 600; }
+.row .title { font-weight: 500; }
+.row .amt { font-weight: 550; }
+.hero .big { font-weight: 650; }
+.tile-btn .badge { border-radius: 16px; }
+
+/* Кнопка «Все счета» под счетами на главной */
+.pill-btn { display: inline-flex; align-items: center; gap: 4px; margin-top: 14px; padding: 7px 12px; border-radius: 999px; background: var(--fill); color: var(--accent); font-size: 14px; font-weight: 550; }
+.air-balance.glass { cursor: default; }
+.banner > span.thin-ico:first-child, .air-notice > span.thin-ico:first-child { flex: none; }
+.thin-ico .tone-dot { width: 9px; height: 9px; right: 3px; bottom: 4px; }
+.key.save-key { background: var(--save); color: var(--on-save); }
