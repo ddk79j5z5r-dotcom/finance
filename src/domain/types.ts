@@ -34,7 +34,8 @@ export interface Account {
 export const ACCOUNT_COLORS = ['yellow', 'green', 'blue', 'sky', 'orange', 'pink', 'violet', 'gray'] as const
 export type AccountColor = (typeof ACCOUNT_COLORS)[number]
 
-export type AccountKind = 'card' | 'savings'
+/** card — карта, savings — копилка, broker — брокерский счёт с облигациями. */
+export type AccountKind = 'card' | 'savings' | 'broker'
 
 export interface Category {
   id?: number

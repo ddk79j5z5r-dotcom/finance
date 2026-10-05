@@ -314,10 +314,10 @@ import { accountKind, accountsForEntry } from './calc'
 describe('порядок счетов при вводе', () => {
   const acc = (id: number, name: string, order: number, kind?: 'card' | 'savings'): Account =>
     ({ id, name, currency: 'RUB', openingBalance: 0, archived: false, order, kind })
-  const accounts = [acc(1, 'Aristo', 0), acc(2, 'Квартира', 1), acc(3, 'Подушка безопасности', 2), acc(4, 'Сбербанк', 3), acc(5, 'Тинькофф Банк', 4), acc(6, 'Наличка', 5)]
+  const accounts = [acc(1, 'Aristo', 0), acc(2, 'Квартира', 1), acc(3, 'Подушка безопасности', 2), acc(4, 'Сбербанк', 3), acc(5, 'Тинькофф Банк', 4), acc(6, 'Наличка', 5), { ...acc(7, 'Т-Инвестиции', 6), kind: 'broker' as const }]
 
   it('тип по названию, явный тип важнее', () => {
-    expect(accounts.map(accountKind)).toEqual(['savings', 'savings', 'savings', 'card', 'card', 'card'])
+    expect(accounts.map(accountKind)).toEqual(['savings', 'savings', 'savings', 'card', 'card', 'card', 'broker'])
     expect(accountKind(acc(9, 'Тинькофф Банк', 0, 'savings'))).toBe('savings')
   })
 
@@ -327,7 +327,7 @@ describe('порядок счетов при вводе', () => {
       tx({ date: '2026-10-03', accountId: 2 }), tx({ date: '2025-01-01', accountId: 1 }),
     ]
     expect(accountsForEntry(accounts, txs, 5, '2026-10-04').map(a => a.name))
-      .toEqual(['Тинькофф Банк', 'Наличка', 'Сбербанк', 'Квартира', 'Aristo', 'Подушка безопасности'])
+      .toEqual(['Тинькофф Банк', 'Наличка', 'Сбербанк', 'Квартира', 'Aristo', 'Подушка безопасности', 'Т-Инвестиции'])
   })
 })
 

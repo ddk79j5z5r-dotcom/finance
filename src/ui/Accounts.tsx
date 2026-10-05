@@ -12,6 +12,8 @@ import type { OpsFilter } from './History'
 import { Icon } from './icons'
 import { notify } from './undo'
 
+const KIND_LABEL: Record<AccountKind, string> = { card: 'карта', savings: 'копилка', broker: 'облигации' }
+
 export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFilter) => void }) {
   const [editAcc, setEditAcc] = useState<Partial<Account> | null>(null)
   const [editGoal, setEditGoal] = useState<Partial<Goal> | null>(null)
@@ -22,6 +24,7 @@ export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFi
   const groups: [string, Account[]][] = [
     ['Карты', accounts.filter(a => accountKind(a) === 'card')],
     ['Копилки', accounts.filter(a => accountKind(a) === 'savings')],
+    ['Облигации', accounts.filter(a => accountKind(a) === 'broker')],
   ]
 
   return (
@@ -46,7 +49,7 @@ export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFi
                     <AccountBadge account={a} color={data.colorOf(a)} />
                     <div className="body">
                       <div className="title">{a.name}</div>
-                      <div className="sub">{a.currency !== 'RUB' ? `${a.currency} · ` : ''}{a.id === data.settings.defaultAccountId ? 'основной' : accountKind(a) === 'card' ? 'карта' : 'копилка'}{a.showOnHome ? ' · на главной' : ''}</div>
+                      <div className="sub">{a.currency !== 'RUB' ? `${a.currency} · ` : ''}{a.id === data.settings.defaultAccountId ? 'основной' : KIND_LABEL[accountKind(a)]}{a.showOnHome ? ' · на главной' : ''}</div>
                     </div>
                     <div className={`amt ${b < 0 ? 'neg' : ''}`}>
                       <Money v={b} cur={a.currency} />
@@ -79,10 +82,13 @@ export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFi
                     </button>
                   )
                 })}
-                {accountKind(a) === 'savings' && (
+                {accountKind(a) !== 'card' && (
                   <div style={{ display: 'flex', gap: 18 }}>
                     <button className="link small" style={{ padding: '6px 0' }} onClick={() => setEditGoal({ accountId: a.id })}>+ цель</button>
-                    {a.currency === 'RUB' && <button className="link small" style={{ padding: '6px 0' }} onClick={() => setAddBondTo(a.id!)}>+ облигация</button>}
+                    {/* Облигации — только на брокерских счетах (и на старых счетах, где они уже есть). */}
+                    {a.currency === 'RUB' && (accountKind(a) === 'broker' || data.trades.some(t => t.accountId === a.id)) && (
+                      <button className="link small" style={{ padding: '6px 0' }} onClick={() => setAddBondTo(a.id!)}>+ облигация</button>
+                    )}
                   </div>
                 )}
               </div>
@@ -109,7 +115,9 @@ function AccountSheet({ data, acc, onClose, onOpenOps }: { data: Data; acc: Part
   const [now, setNow] = useState(current > 0 ? toInput(current) : '')
   const [isDefault, setIsDefault] = useState(acc.id != null && acc.id === data.settings.defaultAccountId)
   const [kind, setKind] = useState<AccountKind>(acc.id != null ? accountKind(acc as Account) : 'card')
-  const [color, setColor] = useState<AccountColor>(acc.id != null ? data.colorOf(acc as Account) : 'blue')
+  // null — цвет подбирается сам (по названию банка или следующий по порядку), пока не выбран вручную.
+  const [color, setColor] = useState<AccountColor | null>(acc.color ?? null)
+  const shownColor = color ?? (acc.id != null ? data.colorOf(acc as Account) : null)
   const [showOnHome, setShowOnHome] = useState(!!acc.showOnHome)
   const [savings, setSavings] = useState(acc.id != null ? isSavingsAccount(acc as Account, data.goals) : false)
   const [taxFree, setTaxFree] = useState(!!acc.taxFree)
@@ -122,7 +130,7 @@ function AccountSheet({ data, acc, onClose, onOpenOps }: { data: Data; acc: Part
       ...(acc as Account), name: name.trim(), currency, openingBalance: fromInput(now) == null && current !== 0
         ? acc.openingBalance ?? 0 // поле очистили при отрицательном балансе — ничего не меняем
         : (acc.openingBalance ?? 0) + ((fromInput(now) ?? 0) - current),
-      archived: acc.archived ?? false, order: acc.order ?? data.accounts.length, kind, color, showOnHome, savings, taxFree,
+      archived: acc.archived ?? false, order: acc.order ?? data.accounts.length, kind, color: color ?? undefined, showOnHome, savings, taxFree,
     })
     if (isDefault) await saveSettings({ defaultAccountId: id })
     onClose()
@@ -149,20 +157,26 @@ function AccountSheet({ data, acc, onClose, onOpenOps }: { data: Data; acc: Part
         {current < 0 && <> Сейчас по операциям: <Money v={current} cur={currency} />.</>}
       </p>
       <label className="field-label">Тип</label>
-      <Chips options={[{ value: 'card' as const, label: 'Карта', icon: 'card' as const }, { value: 'savings' as const, label: 'Копилка', icon: 'target' as const }]} value={kind} onChange={setKind} />
-      <p className="hint">Карты показываются первыми при вводе трат, копилки — после.</p>
+      <Chips options={[
+        { value: 'card' as const, label: 'Карта', icon: 'card' as const },
+        { value: 'savings' as const, label: 'Копилка', icon: 'target' as const },
+        { value: 'broker' as const, label: 'Облигации', icon: 'percent' as const },
+      ]} value={kind} onChange={k => { setKind(k); if (k === 'broker' && acc.id == null) setSavings(true) }} />
+      <p className="hint">{kind === 'broker'
+        ? 'Брокерский счёт: сюда добавляются облигации («+ облигация» в списке счетов). Деньги на него переводишь как обычно.'
+        : 'Карты показываются первыми при вводе трат, копилки — после.'}</p>
       <label className="field-label">Цвет</label>
       <div className="color-picker">
         {ACCOUNT_COLORS.map(c => (
-          <button key={c} type="button" className={c === color ? `acc-${c} on` : `acc-${c}`} aria-label={COLOR_LABEL[c]} onClick={() => setColor(c)}>
-            {c === color && <Icon name="check" size={18} />}
+          <button key={c} type="button" className={c === shownColor ? `acc-${c} on` : `acc-${c}`} aria-label={COLOR_LABEL[c]} onClick={() => setColor(c)}>
+            {c === shownColor && <Icon name="check" size={18} />}
           </button>
         ))}
       </div>
       <label className="check"><input type="checkbox" checked={showOnHome} onChange={e => setShowOnHome(e.target.checked)} /> Показывать на главной под балансом</label>
       <label className="check"><input type="checkbox" checked={savings} onChange={e => setSavings(e.target.checked)} /> Сбережения</label>
       <p className="hint" style={{ marginTop: 4 }}>Переводы на этот счёт (и проценты/купоны на нём) считаются отложенными. Для копилок под платежи — «Квартплата», «Кредиты» — не ставь: оплата с них и так учтётся как нужда.</p>
-      {(kind === 'savings' || hasBonds) && (
+      {(kind === 'broker' || hasBonds) && (
         <label className="check"><input type="checkbox" checked={taxFree} onChange={e => setTaxFree(e.target.checked)} /> Купоны без удержания налога (ИИС)</label>
       )}
       <label className="check"><input type="checkbox" checked={isDefault} onChange={e => setIsDefault(e.target.checked)} /> Основной счёт для ввода</label>

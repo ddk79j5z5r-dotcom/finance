@@ -16,6 +16,7 @@ export function AccountPicker({ data, accounts, value, onChange, label, exclude 
   const groups: [string, Account[]][] = [
     ['Карты', list.filter(a => accountKind(a) === 'card')],
     ['Копилки', list.filter(a => accountKind(a) === 'savings')],
+    ['Облигации', list.filter(a => accountKind(a) === 'broker')],
   ]
   return (
     <>

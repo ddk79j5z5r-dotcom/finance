@@ -538,7 +538,7 @@ export function accountsForEntry(accounts: Account[], txs: Tx[], defaultId: numb
     if (t.date < from) continue
     if (type === 'transfer' ? t.type === 'transfer' : t.type === type) use.set(t.accountId, (use.get(t.accountId) ?? 0) + 1)
   }
-  const rank = (a: Account) => (accountKind(a) === 'card' ? 0 : 1)
+  const rank = (a: Account) => ({ card: 0, savings: 1, broker: 2 })[accountKind(a)]
   return [...accounts].sort((a, b) =>
     rank(a) - rank(b) ||
     Number(b.id === defaultId) - Number(a.id === defaultId) ||
