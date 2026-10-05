@@ -340,3 +340,4 @@ h3 { font-size: 17px; margin: 0; font-weight: 650; }
 .setup-step.done .body { text-decoration: line-through; }
 .check-circle { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; flex: none; }
 .setup-step.done .check-circle { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.ops-link { flex: none; align-self: center; margin-right: -8px; color: var(--accent); }

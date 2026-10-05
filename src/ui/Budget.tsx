@@ -12,6 +12,7 @@ import { Badge, categoryIcon, Icon } from './icons'
 export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistribute: (t: Tx) => void; onOpenOps: (f: OpsFilter) => void }) {
   const [month, setMonth] = useState(monthOf(todayISO()))
   const [pay, setPay] = useState<Recurring | null>(null)
+  const [limitFor, setLimitFor] = useState<Category | null>(null)
 
   const buckets = bucketStates(data, month, data.settings)
   const envs = envelopes(data.categories, data.limits, data.txs, month)
@@ -84,28 +85,33 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
         })}
       </div>
 
-      <div className="section-title"><h3>Категории</h3><span className="muted small">нажми — траты и лимит</span></div>
+      <div className="section-title"><h3>Категории</h3><span className="muted small">нажми — лимит, <Icon name="list" size={13} /> — операции</span></div>
       <div className="card tight">
         {sorted.map(e => {
           const cap = e.limit
           return (
-            <button className="row" key={e.category.id} onClick={() => onOpenOps({ categoryId: e.category.id, from: month, to: month })}>
+            <div className="row" key={e.category.id}>
+              <button className="row-main" style={{ alignItems: 'flex-start' }} onClick={() => setLimitFor(e.category)}>
               <Badge icon={categoryIcon(e.category)} tone={e.category.bucket} />
               <div className="body">
-                <div className="line" style={{ padding: 0 }}>
-                  <span className="title">{e.category.name}</span>
-                  <span className="num small"><Money v={e.spent} round />{cap > 0 && <span className="muted"> / <Money v={cap} round /></span>}</span>
-                </div>
+                <div className="title">{e.category.name}</div>
                 {cap > 0 ? (
                   <>
                     <Bar value={e.spent} max={cap} color={`var(--${e.category.bucket})`} />
-                    <div className={`small num ${e.available < 0 ? 'neg' : 'muted'}`}>
-                      {e.available < 0 ? 'перерасход ' : 'осталось '}{formatMoney(Math.round(Math.abs(e.available) / 100) * 100)}
+                    <div className="small num muted">
+                      <Money v={e.spent} round /> из <Money v={cap} round /> ·{' '}
+                      <span className={e.available < 0 ? 'neg' : ''}>{e.available < 0 ? 'перерасход ' : 'осталось '}{formatMoney(Math.round(Math.abs(e.available) / 100) * 100)}</span>
                     </div>
                   </>
-                ) : <div className="sub">лимит не задан</div>}
+                ) : <div className="sub">{e.spent > 0 && <><Money v={e.spent} round /> · </>}лимит не задан</div>}
               </div>
-            </button>
+              </button>
+              {e.spent > 0 && (
+                <button className="icon-btn ops-link" aria-label={`Операции: ${e.category.name}`} onClick={() => onOpenOps({ categoryId: e.category.id, from: month, to: month })}>
+                  <Icon name="list" size={20} />
+                </button>
+              )}
+            </div>
           )
         })}
       </div>
@@ -158,6 +164,7 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
         </>
       )}
 
+      {limitFor && <LimitSheet data={data} category={limitFor} month={month} onClose={() => setLimitFor(null)} />}
       {pay && <PaySheet data={data} r={pay} onClose={() => setPay(null)} />}
     </div>
   )
