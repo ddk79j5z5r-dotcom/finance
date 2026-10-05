@@ -49,7 +49,7 @@ export function More({ data, section, setSection, onOpenPage }: {
           <Bar value={stepsDone} max={steps.length} color="var(--accent)" />
           {steps.map(st => (
             <button key={st.id} className={`setup-step ${st.done ? 'done' : ''}`} disabled={st.done}
-              onClick={() => (st.id === 'goals' ? onOpenPage('accounts') : setSection(st.id))}>
+              onClick={() => (st.id === 'goals' || st.id === 'roles' ? onOpenPage('accounts') : setSection(st.id))}>
               <span className="check-circle">{st.done && <Icon name="check" size={14} />}</span>
               <span className="body">{st.label}</span>
               {!st.done && <Icon name="right" size={16} />}
@@ -162,7 +162,7 @@ function CategoriesSection({ data }: { data: Data }) {
     <>
       {edit ? <CategoryForm data={data} cat={edit} onDone={() => setEdit(null)} /> : (
         <>
-          <p className="hint">Тип решает, куда идёт трата в 50/30/20. У подкатегории может быть свой тип — например, «Aristo → Проект» как желание.</p>
+          <p className="hint">Тип категории — для цвета и подсказок. В правиле 50/30/20 он не участвует: правило считается по ролям счетов.</p>
           {BUCKETS.filter(b => b !== 'savings').map(b => (
             <div key={b}>
               <div className="day">{BUCKET_LABEL[b]}</div>

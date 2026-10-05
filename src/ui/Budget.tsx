@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { db } from '../db'
-import { bucketStates, envelopes, freeInMonth, isPaid, planIncome } from '../domain/calc'
+import { bucketStates, envelopes, isPaid, planIncome } from '../domain/calc'
 import { formatMoney, monthLabel, monthOf, shiftMonth, todayISO } from '../domain/money'
-import { BUCKET_LABEL, BUCKETS, INCOME_LABEL, type Category, type Recurring, type Tx } from '../domain/types'
+import { BUCKETS, INCOME_LABEL, type Category, type Recurring, type Tx } from '../domain/types'
 import { AmountInput, Bar, fromInput, Money, MonthNav, Sheet, toInput, useOnce } from './common'
 import { AccountBadge } from './AccountBadge'
 import type { Data } from './data'
 import type { OpsFilter } from './History'
 import { Badge, categoryIcon, Icon } from './icons'
+
+const ROLE_TITLE = { needs: 'Нужды', wants: 'Желания', savings: 'Сбережения' } as const
 
 export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistribute: (t: Tx) => void; onOpenOps: (f: OpsFilter) => void }) {
   const [month, setMonth] = useState(monthOf(todayISO()))
@@ -18,7 +20,6 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
   const envs = envelopes(data.categories, data.limits, data.txs, month)
     .filter(e => e.limit || e.spent || !e.category.system)
   const income = planIncome(data.txs, month, data.settings)
-  const free = freeInMonth(data, month)
   const plan = envs.reduce((s, e) => s + e.limit, 0)
   const fact = envs.reduce((s, e) => s + e.spent, 0)
   const allocated = new Set(data.allocations.map(a => a.txId))
@@ -86,22 +87,15 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
           return (
             <div key={b} style={{ marginTop: 10 }}>
               <div className="line small" style={{ padding: 0 }}>
-                <span><strong>{b === 'savings' ? 'Отложено' : BUCKET_LABEL[b]}</strong> <span className="muted">{data.settings.rule[b]}%</span></span>
+                <span><strong>{ROLE_TITLE[b]}</strong> <span className="muted">{data.settings.rule[b]}%</span></span>
                 <span className="num"><Money v={s.spent} round /> <span className="muted">/ рек. <Money v={s.target} round /></span></span>
               </div>
-              <Bar value={s.spent} max={s.target} color={`var(--${b})`} />
-              {b !== 'savings' && s.planned > s.target && s.target > 0 && (
-                <p className="warn">Лимиты конвертов ({formatMoney(s.planned)}) больше {data.settings.rule[b]}% дохода</p>
-              )}
+              <Bar value={Math.max(0, s.spent)} max={s.target} color={`var(--${b})`} />
             </div>
           )
         })}
-        <div className="line small" style={{ marginTop: 12, paddingBottom: 0, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
-          <span className="muted">Свободный остаток</span>
-          <strong className={`num ${free < 0 ? 'neg' : ''}`}><Money v={free} round /></strong>
-        </div>
-        <p className="hint" style={{ margin: '4px 0 0', fontSize: 13 }}>
-          Нужды и желания — траты по категориям. Отложено — переводы на счета с пометкой «Сбережения». Остаток — пришло, но не потрачено и не отложено.
+        <p className="hint" style={{ margin: '10px 0 0', fontSize: 13 }}>
+          Считается по счетам: желания и сбережения — сколько за месяц ушло на счета этой роли, нужды — что осталось на картах и счетах-нуждах. Роль копилки — в её настройках.
         </p>
       </div>
 

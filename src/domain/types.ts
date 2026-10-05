@@ -25,7 +25,9 @@ export interface Account {
   color?: AccountColor
   /** Показывать под общим балансом на главной. */
   showOnHome?: boolean
-  /** Учитывать в 50/30/20 как сбережения. Не задано — да, если на счёте есть цель. */
+  /** Роль в 50/30/20: деньги, переведённые на счёт, — нужды, желания или сбережения. Карта — всегда нужды. */
+  role?: Bucket
+  /** Устаревший флажок «Сбережения» (до появления роли) — учитывается, если роль не задана. */
   savings?: boolean
   /** С купонов не удерживается налог (например, ИИС). */
   taxFree?: boolean
@@ -130,6 +132,8 @@ export interface Settings {
   lastExportAt: number | null
   categoriesReviewed?: boolean
   setupDismissed?: boolean
+  /** Когда последний раз закрыли напоминание о бэкапе (показывается не чаще раза в неделю). */
+  backupNudgeAt?: number | null
 }
 
 export const DEFAULT_SETTINGS: Settings = {

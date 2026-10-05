@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { db } from '../db'
 import { allocationOf, suggestDistribution } from '../domain/calc'
 import { formatMoney, monthOf } from '../domain/money'
-import { BUCKET_LABEL, BUCKETS, INCOME_LABEL, REGULAR_INCOME, type Tx } from '../domain/types'
+import { BUCKETS, INCOME_LABEL, REGULAR_INCOME, type Tx } from '../domain/types'
 import { Money, Sheet, useOnce } from './common'
 import type { Data } from './data'
 
@@ -15,7 +15,7 @@ const dayLabel = (d: number) => `${d}-го`
 export function Distribute({ data, tx, onClose }: { data: Data; tx: Tx; onClose: () => void }) {
   const d = useMemo(() => suggestDistribution(
     tx,
-    { txs: data.txs, recurring: data.recurring, goals: data.goals, categories: data.categories, goalRemainingRub: data.goalRemainingRub, goalMonthLeftRub: data.goalMonthLeftRub },
+    { txs: data.txs, recurring: data.recurring, goals: data.goals, categories: data.categories, accounts: data.accounts, goalRemainingRub: data.goalRemainingRub, goalMonthLeftRub: data.goalMonthLeftRub },
     data.settings,
     r => data.toRub(r.amount, r.currency) ?? 0,
   ), [tx, data])
@@ -34,14 +34,14 @@ export function Distribute({ data, tx, onClose }: { data: Data; tx: Tx; onClose:
     <Sheet title={`${INCOME_LABEL[kind]}: ${formatMoney(tx.amount, acc?.currency)}`} onClose={onClose}>
       <p className="hint">
         {REGULAR_INCOME.includes(kind)
-          ? `Рекомендация по правилу ${data.settings.rule.needs}/${data.settings.rule.wants}/${data.settings.rule.savings} — с учётом обязательных платежей и того, как разложены прошлые выплаты месяца.`
+          ? `Рекомендация по правилу ${data.settings.rule.needs}/${data.settings.rule.wants}/${data.settings.rule.savings}: сколько оставить на картах и копилках-нуждах, сколько перевести на счета желаний и сбережений — с учётом обязательных платежей и прошлых выплат месяца.`
           : 'Нерегулярные деньги разумно целиком отложить.'}
       </p>
       <div className="card">
         {BUCKETS.map(b => (
           <div key={b} style={{ padding: '6px 0' }}>
             <div className="line" style={{ padding: 0 }}>
-              <span>{b === 'savings' ? 'Отложить' : BUCKET_LABEL[b]}</span>
+              <span>{b === 'needs' ? 'Оставить на нужды' : b === 'wants' ? 'На счета желаний' : 'Отложить в сбережения'}</span>
               <strong className="num"><Money v={total[b]} round /></strong>
             </div>
             {reservedBy(b).length > 0 && (

@@ -54,7 +54,8 @@ export function Calendar({ data }: { data: Data }) {
                 {Number(d.slice(8))}
                 <span className="dots">
                   {ev.some(e => e.kind === 'payment') && <i className="dot-pay" />}
-                  {(ev.some(e => e.kind !== 'payment') || bev) && <i className="dot-inc" />}
+                  {ev.some(e => e.kind !== 'payment') && <i className="dot-inc" />}
+                  {bev && <i className="dot-coupon" />}
                   {inMonth && !ev.length && !bev && txDays.has(d) && <i className="dot-tx" />}
                 </span>
               </button>
@@ -63,7 +64,8 @@ export function Calendar({ data }: { data: Data }) {
         </div>
         <div className="legend">
           <span><i style={{ background: 'var(--neg)' }} />платёж</span>
-          <span><i style={{ background: 'var(--pos)' }} />выплата, купон</span>
+          <span><i style={{ background: 'var(--pos)' }} />выплата</span>
+          <span><i style={{ background: 'var(--coupon)' }} />купон</span>
           <span><i style={{ background: 'var(--muted)' }} />были операции</span>
         </div>
       </div>

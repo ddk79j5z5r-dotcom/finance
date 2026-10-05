@@ -31,6 +31,7 @@
   --glass-line: rgba(255, 255, 255, 0.7);
   --glass-hi: rgba(255, 255, 255, 0.9);
   --glass-shadow: 0 10px 30px rgba(30, 60, 50, 0.08);
+  --coupon: #6d4fe0;
   --blob-1: rgba(47, 191, 113, 0.22);
   --blob-2: rgba(56, 189, 248, 0.16);
   --blob-3: rgba(167, 139, 250, 0.12);
@@ -68,6 +69,7 @@
     --glass-line: rgba(255, 255, 255, 0.09);
     --glass-hi: rgba(255, 255, 255, 0.07);
     --glass-shadow: 0 12px 34px rgba(0, 0, 0, 0.35);
+    --coupon: #a78bfa;
     --blob-1: rgba(47, 191, 113, 0.30);
     --blob-2: rgba(45, 140, 200, 0.22);
     --blob-3: rgba(139, 92, 246, 0.16);
@@ -560,3 +562,35 @@ h3 { font-weight: 600; }
 /* Экран блокировки — по видимой области, чтобы поле PIN не уходило под клавиатуру. */
 .lock { min-height: var(--vvh, 100dvh); }
 .air .air-stats:last-child { border-bottom: 0; padding-bottom: 0; }
+
+/* ---------- Компактное окно ввода ---------- */
+.sheet.full .sheet-head { padding: 10px 16px 6px; }
+.amount-display { min-height: 50px; margin: 2px 0 0; }
+.amount-display .v { font-size: 42px; }
+.amount-display .cur { font-size: 26px; }
+.amount-sub { min-height: 18px; margin-bottom: 8px; font-size: 14px; }
+.entry .scroll-row { margin-bottom: 10px !important; }
+.acc-picks { gap: 6px; margin-bottom: 10px; }
+.acc-pick { min-height: 52px; padding: 7px 12px; }
+.entry .scroll-row[style*="margin-top"] { margin-top: 0 !important; }
+.entry .chip { min-height: 38px; padding: 8px 13px; }
+.entry .comment { margin-top: 0; padding: 10px 14px; }
+/* Клавиатура суммы — на непрозрачной подложке: то, что под ней, не просвечивает. */
+.keypad {
+  margin-top: 10px; gap: 7px; padding-top: 8px;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+}
+.key { height: 48px; font-size: 22px; }
+
+/* Купоны — фиолетовым, выплаты — зелёным */
+.tone-dot.tone-coupon, .tone-dot-inline.tone-coupon { background: var(--coupon); }
+.amt.coupon { color: var(--coupon); }
+.dot-coupon { background: var(--coupon); }
+.air-notice.coupon::before { background: var(--coupon); }
+.air-notice-row { display: flex; align-items: center; border-bottom: 1px solid var(--line); }
+.air-notice-row .air-notice { flex: 1; border-bottom: 0; }
+.air-notice-row:last-child { border-bottom: 0; }
+.sheet.full .sheet-body { flex: 1; display: flex; flex-direction: column; }
+.sheet.full .entry { flex: 1; }
+.sheet.full .entry .keypad { margin-top: auto; }

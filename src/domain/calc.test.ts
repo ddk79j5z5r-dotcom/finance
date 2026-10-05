@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  allocationOf, freeInMonth, balances, bucketStates, envelopes, goalProgress, planIncome, suggestDistribution, suggestGoals,
+  accountRole, allocationOf, balances, bucketStates, envelopes, goalProgress, planIncome, suggestDistribution, suggestGoals,
 } from './calc'
 import { formatMoney, parseAmount } from './money'
 import type { Account, Category, Goal, Limit, Recurring, Tx } from './types'
@@ -130,31 +130,40 @@ describe('распределение поступлений (реальный с
     expect(planIncome([gift, salary], '2026-10', settings)).toBe(R(140000))
   })
 
-  it('нужды — только траты; перевод на копилку под платёж не двоит нужды; остаток месяца', () => {
+  it('50/30/20 по счетам: желания и сбережения — что ушло на счета этих ролей, нужды — что осталось', () => {
+    const acc = (id: number, name: string, p: Partial<Account> = {}): Account => ({ id, name, currency: 'RUB', openingBalance: 0, archived: false, order: id, ...p })
     const accounts = [
-      { id: 1, name: 'Карта', currency: 'RUB' as const, openingBalance: 0, archived: false, order: 0 },
-      { id: 6, name: 'Квартплата', currency: 'RUB' as const, openingBalance: 0, archived: false, order: 1 },
-      { id: 5, name: 'Подушка', currency: 'RUB' as const, openingBalance: 0, archived: false, order: 2, savings: true },
+      acc(1, 'Тинькофф Банк'), // карта → нужды
+      acc(6, 'Квартплата', { kind: 'savings', role: 'needs' }),
+      acc(7, 'Game', { kind: 'savings', role: 'wants' }),
+      acc(5, 'Подушка', { kind: 'savings', role: 'savings' }),
+      acc(8, 'Т-Инвестиции', { kind: 'broker' }),
     ]
+    const tr = (from: number, to: number, rub: number, date = '2026-10-13') =>
+      tx({ type: 'transfer', date, accountId: from, toAccountId: to, amount: R(rub), rub: R(rub), toAmount: R(rub), toRub: R(rub) })
     const txs = [
-      tx({ type: 'income', incomeKind: 'salary', date: '2026-10-13', amount: R(60000), rub: R(60000) }),
-      tx({ type: 'transfer', date: '2026-10-13', accountId: 1, toAccountId: 6, amount: R(30000), rub: R(30000), toAmount: R(30000), toRub: R(30000) }),
+      tx({ type: 'income', incomeKind: 'salary', date: '2026-10-13', accountId: 1, amount: R(60000), rub: R(60000) }),
+      tr(1, 6, 30000), // на квартплату — это всё ещё нужды, не двоится
       tx({ date: '2026-10-14', accountId: 6, categoryId: 2, amount: R(30000), rub: R(30000) }),
-      tx({ type: 'transfer', date: '2026-10-15', accountId: 1, toAccountId: 5, amount: R(5000), rub: R(5000), toAmount: R(5000), toRub: R(5000) }),
+      tr(1, 7, 6000), tr(7, 1, 1000), // на желания 6 000, 1 000 вернул
+      tr(1, 5, 5000), tr(1, 8, 4000), // сбережения: подушка и облигации
+      tx({ type: 'income', incomeKind: 'interest', date: '2026-10-20', accountId: 8, amount: R(300), rub: R(300) }),
     ]
-    const b = bucketStates({ categories: cats, limits: [], goals: [], accounts, txs }, '2026-10', settings)
-    expect(b.needs.spent).toBe(R(30000))
-    expect(b.savings.spent).toBe(R(5000))
-    expect(freeInMonth({ txs, goals: [], accounts }, '2026-10')).toBe(R(60000 - 30000 - 5000))
+    const b = bucketStates({ goals: [], accounts, txs }, '2026-10', settings)
+    expect(b.wants.spent).toBe(R(5000))
+    expect(b.savings.spent).toBe(R(9300))
+    expect(b.needs.spent).toBe(R(60300 - 5000 - 9300))
+    expect(b.needs.target).toBe(R((60000 + 60000 + 300) * 0.5)) // база: зарплата + ожидаемый аванс + купон
   })
 
-  it('сумма сбережений по факту — переводы на счёт целей', () => {
-    const s = bucketStates({
-      categories: cats, limits: [], goals,
-      accounts: [{ id: 5, name: 'Накопительный', currency: 'RUB', openingBalance: 0, archived: false, order: 0 }],
-      txs: [tx({ type: 'transfer', date: '2026-10-14', accountId: 1, amount: R(8000), rub: R(8000), toAccountId: 5, toAmount: R(8000), toRub: R(8000) })],
-    }, '2026-10', settings)
-    expect(s.savings.spent).toBe(R(8000))
+  it('роль счёта: карта — нужды, облигации — сбережения, старый флажок и цель — сбережения', () => {
+    const a = (p: Partial<Account>): Account => ({ id: 1, name: 'Счёт', currency: 'RUB', openingBalance: 0, archived: false, order: 0, kind: 'savings', ...p })
+    expect(accountRole(a({ kind: 'card', role: 'wants' }), [])).toBe('needs')
+    expect(accountRole(a({ kind: 'broker' }), [])).toBe('savings')
+    expect(accountRole(a({ savings: true }), [])).toBe('savings')
+    expect(accountRole(a({}), [{ id: 1, name: 'Ц', target: 1, accountId: 1, priority: 0 }])).toBe('savings')
+    expect(accountRole(a({}), [])).toBe('needs')
+    expect(accountRole(a({ role: 'wants', savings: true }), [])).toBe('wants')
   })
 })
 
@@ -356,10 +365,11 @@ describe('пополнение копилки пополам из зарплат
   const cats: Category[] = [{ id: 32, name: 'Проект', parentId: null, bucket: 'wants', archived: false }]
   const settings = { ...DEFAULT_SETTINGS, expectedSalary: R(60000), expectedAdvance: R(40000) }
 
-  it('половина в каждую выплату, в тип своей категории, переводом на копилку', () => {
+  it('половина в каждую выплату, по роли копилки, переводом на неё', () => {
     for (const kind of ['salary', 'advance'] as const) {
       const income = tx({ type: 'income', incomeKind: kind, date: '2026-10-13', amount: R(50000), rub: R(50000) })
-      const d = suggestDistribution(income, { txs: [income], recurring: [topup], goals: [], categories: cats, goalRemainingRub: new Map() }, settings, r => r.amount)
+      const accounts: Account[] = [{ id: 40, name: 'Aristo project', currency: 'RUB', openingBalance: 0, archived: false, order: 0, kind: 'savings', role: 'wants' }]
+      const d = suggestDistribution(income, { txs: [income], recurring: [topup], goals: [], categories: cats, accounts, goalRemainingRub: new Map() }, settings, r => r.amount)
       expect(d.reserves).toEqual([{ recurring: topup, rub: R(7500), bucket: 'wants' }])
       expect(allocationOf(d).wants).toBeGreaterThanOrEqual(R(7500))
       expect(transfersFor(d, 1)).toEqual([{ accountId: 40, rub: R(7500), reasons: ['Aristo'] }])
@@ -404,7 +414,7 @@ describe('цвета счетов и первая настройка', () => {
   })
   it('пункты настройки отмечаются по данным', () => {
     const steps = setupSteps({ settings: { ...DEFAULT_SETTINGS, expectedSalary: 1, expectedAdvance: 1, lastExportAt: 5 }, recurring: [], goals: [] }, true)
-    expect(steps.filter(s => s.done).map(s => s.id)).toEqual(['pay', 'security', 'backup'])
+    expect(steps.filter(s => s.done).map(s => s.id)).toEqual(['pay', 'roles', 'security', 'backup'])
   })
 })
 

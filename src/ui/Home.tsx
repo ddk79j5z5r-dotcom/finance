@@ -1,4 +1,5 @@
-import { bucketStates, freeInMonth, monthForecast, monthTotals, netChangeSince, upcoming, type PlannedEvent } from '../domain/calc'
+import { bucketStates, monthForecast, monthTotals, netChangeSince, upcoming, type PlannedEvent } from '../domain/calc'
+import { saveSettings } from '../db'
 import { bondEvents, type BondEvent } from '../domain/bonds'
 import { BondEventSheet } from './Bonds'
 import { useState } from 'react'
@@ -45,12 +46,13 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
   const [bondEvent, setBondEvent] = useState<BondEvent | null>(null)
   const allocated = new Set(data.allocations.map(a => a.txId))
   const pending = data.txs.filter(t => t.type === 'income' && monthOf(t.date) === month && !allocated.has(t.id!))
-  const exportStale = data.txs.length > 0 && (data.settings.lastExportAt
-    ? Date.now() - data.settings.lastExportAt > 7 * 864e5
-    : !!data.settings.setupDismissed)
+  // Напоминание о бэкапе — не чаще раза в неделю: если бэкапа не было неделю и напоминание не закрывали неделю.
+  const WEEK = 7 * 864e5
+  const exportStale = data.txs.length > 0
+    && (!data.settings.lastExportAt || Date.now() - data.settings.lastExportAt > WEEK)
+    && (!data.settings.backupNudgeAt || Date.now() - data.settings.backupNudgeAt > WEEK)
   const forecast = monthForecast(data, data.settings, today, r => data.toRub(r.amount, r.currency) ?? r.amount)
   const buckets = bucketStates(data, month, data.settings)
-  const free = freeInMonth(data, month)
 
   return (
     <div className="page air">
@@ -84,14 +86,17 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
             </button>
           ))}
           {data.pendingBond.slice(0, 3).map(ev => (
-            <button className="air-notice" key={ev.key} onClick={() => setBondEvent(ev)}>
+            <button className="air-notice coupon" key={ev.key} onClick={() => setBondEvent(ev)}>
               <span>{ev.kind === 'coupon' ? 'Купон' : 'Погашение'} {ev.shortName}{ev.amount != null && <> — <Money v={ev.amount} round /></>} — записать</span><Icon name="right" size={16} />
             </button>
           ))}
           {exportStale && (
-            <button className="air-notice warn" onClick={onOpenBackup}>
-              <span>{data.settings.lastExportAt ? 'Бэкапа не было больше недели' : 'Бэкап ещё не делался'}</span><Icon name="right" size={16} />
-            </button>
+            <div className="air-notice-row">
+              <button className="air-notice warn" onClick={onOpenBackup}>
+                <span>{data.settings.lastExportAt ? 'Бэкапа не было больше недели — сохрани Excel' : 'Сделай бэкап в Excel'}</span><Icon name="right" size={16} />
+              </button>
+              <button className="icon-btn" aria-label="Напомнить через неделю" onClick={() => saveSettings({ backupNudgeAt: Date.now() })}><Icon name="close" size={16} /></button>
+            </div>
           )}
         </div>
       )}
@@ -114,8 +119,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
             <span className="rule-line">
               <span><i className="tone-dot-inline tone-needs" />Нужды <Money v={buckets.needs.spent} round /> / <Money v={buckets.needs.target} round /></span>
               <span><i className="tone-dot-inline tone-wants" />Желания <Money v={buckets.wants.spent} round /> / <Money v={buckets.wants.target} round /></span>
-              <span><i className="tone-dot-inline tone-savings" />Отложено <Money v={buckets.savings.spent} round /> / <Money v={buckets.savings.target} round /></span>
-              <span className="muted">Свободный остаток <Money v={free} round /></span>
+              <span><i className="tone-dot-inline tone-savings" />Сбережения <Money v={buckets.savings.spent} round /> / <Money v={buckets.savings.target} round /></span>
             </span>
           </button>
         )}
@@ -133,7 +137,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
   )
 }
 
-function Lead({ icon, tone, thin }: { icon: IconName; tone: Bucket | 'income' | 'transfer'; thin?: boolean }) {
+function Lead({ icon, tone, thin }: { icon: IconName; tone: Bucket | 'income' | 'transfer' | 'coupon'; thin?: boolean }) {
   if (!thin) return <Badge icon={icon} tone={tone} />
   return <span className="thin-ico"><Icon name={icon} size={22} stroke={1.6} /><i className={`tone-dot tone-${tone}`} /></span>
 }
@@ -141,12 +145,12 @@ function Lead({ icon, tone, thin }: { icon: IconName; tone: Bucket | 'income' | 
 export function BondEventRow({ e, today, thin }: { e: BondEvent; today: string; thin?: boolean }) {
   return (
     <div className="row">
-      <Lead icon="percent" tone="income" thin={thin} />
+      <Lead icon="percent" tone="coupon" thin={thin} />
       <div className="body">
         <div className="title">{e.kind === 'coupon' ? 'Купон' : 'Погашение'} {e.shortName}</div>
         <div className="sub">{[shortDate(e.date), inDays(e.date, today), `${e.qty} шт.`].filter(Boolean).join(' · ')}</div>
       </div>
-      <div className="amt pos">{e.amount != null ? <>{e.estimated ? '≈ ' : ''}+<Money v={e.amount} round /></> : <span className="muted small">не объявлен</span>}</div>
+      <div className="amt coupon">{e.amount != null ? <>{e.estimated ? '≈ ' : ''}+<Money v={e.amount} round /></> : <span className="muted small">не объявлен</span>}</div>
     </div>
   )
 }

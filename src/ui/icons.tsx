@@ -88,7 +88,7 @@ export const INCOME_ICON: Record<IncomeKind, IconName> = {
 }
 
 /** Тонкая иконка с маленькой цветной точкой типа (нужды / желания / сбережения / доход / перевод). */
-export function Badge({ icon, tone, size = 40 }: { icon: IconName; tone: Bucket | 'income' | 'transfer'; size?: number }) {
+export function Badge({ icon, tone, size = 40 }: { icon: IconName; tone: Bucket | 'income' | 'transfer' | 'coupon'; size?: number }) {
   return (
     <span className="thin-ico" style={{ width: size, height: size }}>
       <Icon name={icon} size={Math.round(size * 0.58)} stroke={1.6} />
