@@ -1,11 +1,12 @@
+import type { Trade } from './bonds'
 import { monthOf, shiftMonth } from './money'
 import type { Account, AccountColor, AccountKind, Allocation, Bucket, Category, Goal, IncomeKind, Limit, Recurring, Settings, Tx } from './types'
 import { ACCOUNT_COLORS, BUCKETS, REGULAR_INCOME } from './types'
 
 // ---------- Балансы ----------
 
-/** Баланс каждого счёта в его валюте. */
-export function balances(accounts: Account[], txs: Tx[]): Map<number, number> {
+/** Баланс (свободные деньги) каждого счёта в его валюте. Сделки с облигациями переводят деньги в бумаги и обратно. */
+export function balances(accounts: Account[], txs: Tx[], trades: Trade[] = []): Map<number, number> {
   const res = new Map<number, number>()
   for (const a of accounts) res.set(a.id!, a.openingBalance)
   const add = (id: number | undefined, v: number) => id != null && res.has(id) && res.set(id, res.get(id)! + v)
@@ -17,6 +18,7 @@ export function balances(accounts: Account[], txs: Tx[]): Map<number, number> {
       add(t.toAccountId, t.toAmount ?? t.amount)
     }
   }
+  for (const t of trades) add(t.accountId, t.type === 'buy' ? -t.amount : t.amount)
   return res
 }
 
@@ -106,16 +108,26 @@ export interface BucketState {
   spent: number // фактически потрачено / отложено
 }
 
-/** Сбережения по факту — переводы на счета, к которым привязаны цели. */
-export function savedInMonth(txs: Tx[], goals: Goal[], month: string): number {
-  const goalAccounts = new Set(goals.map(g => g.accountId))
+/** Счёт учитывается в 50/30/20 как сбережения: явный флажок, иначе — если на нём есть цель. */
+export function isSavingsAccount(a: Account, goals: Goal[]): boolean {
+  return a.savings ?? goals.some(g => g.accountId === a.id)
+}
+
+/**
+ * Сбережения по факту (₽): чистые переводы на сберегательные счета за месяц
+ * плюс проценты и купоны, пришедшие прямо на них. Покупка облигаций внутри счёта сюда не входит.
+ */
+export function savedInMonth(txs: Tx[], accounts: Account[], goals: Goal[], month: string): number {
+  const saving = new Set(accounts.filter(a => isSavingsAccount(a, goals)).map(a => a.id!))
   let s = 0
   for (const t of txs) {
-    if (monthOf(t.date) !== month || t.type !== 'transfer') continue
-    const into = goalAccounts.has(t.toAccountId!)
-    const out = goalAccounts.has(t.accountId)
-    if (into && !out) s += t.toRub ?? t.rub
-    if (out && !into) s -= t.rub
+    if (monthOf(t.date) !== month) continue
+    if (t.type === 'transfer') {
+      const into = saving.has(t.toAccountId!)
+      const out = saving.has(t.accountId)
+      if (into && !out) s += t.toRub ?? t.rub
+      if (out && !into) s -= t.rub
+    } else if (t.type === 'income' && t.incomeKind === 'interest' && saving.has(t.accountId)) s += t.rub
   }
   return s
 }
@@ -140,7 +152,7 @@ export function spentByBucket(categories: Category[], txs: Tx[], month: string):
 }
 
 export function bucketStates(
-  data: { categories: Category[]; limits: Limit[]; txs: Tx[]; allocations: Allocation[]; goals: Goal[] },
+  data: { categories: Category[]; limits: Limit[]; txs: Tx[]; allocations: Allocation[]; goals: Goal[]; accounts: Account[] },
   month: string,
   settings: Settings,
 ): Record<Bucket, BucketState> {
@@ -157,7 +169,7 @@ export function bucketStates(
       spent: spent[b],
     }
   }
-  res.savings.spent += savedInMonth(data.txs, data.goals, month)
+  res.savings.spent += savedInMonth(data.txs, data.accounts, data.goals, month)
   return res
 }
 

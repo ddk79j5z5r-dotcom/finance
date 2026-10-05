@@ -1,5 +1,8 @@
 import { bucketStates, monthAverage, monthForecast, monthTotals, netChangeSince, savingsRate, setupSteps, upcoming, type PlannedEvent, type SetupStep } from '../domain/calc'
 import { saveSettings } from '../db'
+import { bondEvents, type BondEvent } from '../domain/bonds'
+import { BondEventSheet } from './Bonds'
+import { useState } from 'react'
 import { AccountDot } from './AccountBadge'
 import { formatMoney, monthOf, todayISO } from '../domain/money'
 import { BUCKET_LABEL, BUCKETS, INCOME_LABEL, type Tx } from '../domain/types'
@@ -30,7 +33,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
   const today = todayISO()
   const month = monthOf(today)
   const accounts = activeAccounts(data.accounts)
-  const total = accounts.reduce((s, a) => s + (data.toRub(data.bal.get(a.id!) ?? 0, a.currency) ?? 0), 0)
+  const total = accounts.reduce((s, a) => s + (data.toRub(data.value.get(a.id!) ?? 0, a.currency) ?? 0), 0)
   // Под балансом — счета с галочкой «на главной»; если не отмечен ни один — основной счёт.
   const flagged = accounts.filter(a => a.showOnHome)
   const homeAccounts = flagged.length ? flagged : accounts.filter(a => a.id === data.settings.defaultAccountId)
@@ -41,7 +44,12 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
   const totals = monthTotals(data.txs, month)
   const avg = monthAverage(data.txs, month)
   const buckets = bucketStates(data, month, data.settings)
-  const events = upcoming(data.recurring, data.settings, today, 31).slice(0, 5)
+  const in31 = new Date(); in31.setDate(in31.getDate() + 31)
+  const items: ({ date: string; plan: PlannedEvent } | { date: string; bond: BondEvent })[] = [
+    ...upcoming(data.recurring, data.settings, today, 31).map(plan => ({ date: plan.date, plan })),
+    ...bondEvents(data.trades, data.bonds, today, todayISO(in31), data.taxFree).map(bond => ({ date: bond.date, bond })),
+  ].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6)
+  const [bondEvent, setBondEvent] = useState<BondEvent | null>(null)
   const allocated = new Set(data.allocations.map(a => a.txId))
   const pending = data.txs.filter(t => t.type === 'income' && monthOf(t.date) === month && !allocated.has(t.id!))
   // Пока бэкапа не было, о нём напоминает карточка настройки; баннер — когда бэкап устарел (или карточку скрыли).
@@ -69,6 +77,16 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
           <Icon name="right" size={18} />
         </button>
       ))}
+      {data.pendingBond.slice(0, 3).map(ev => (
+        <button className="banner accent-b" key={ev.key} onClick={() => setBondEvent(ev)}>
+          <Badge icon="percent" tone="income" size={34} />
+          <span className="body">
+            {ev.kind === 'coupon' ? 'Купон' : 'Погашение'} {ev.shortName}{ev.amount != null && <> — <strong><Money v={ev.amount} round /></strong></>}. Записать?
+          </span>
+          <Icon name="right" size={18} />
+        </button>
+      ))}
+      {data.pendingBond.length > 3 && <p className="hint">И ещё {data.pendingBond.length - 3} событий по облигациям — после этих появятся следующие.</p>}
       {exportStale && (
         <button className="banner warn-b" onClick={onOpenBackup}>
           <span className="badge" style={{ width: 34, height: 34, color: 'var(--warn)' }}><Icon name="download" size={18} /></span>
@@ -97,7 +115,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
             {homeAccounts.map(a => (
               <span className="line" key={a.id}>
                 <span className="n" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><AccountDot color={data.colorOf(a)} />{a.name}</span>
-                <span className="num"><Money v={data.bal.get(a.id!) ?? 0} cur={a.currency} round /></span>
+                <span className="num"><Money v={data.value.get(a.id!) ?? 0} cur={a.currency} round /></span>
               </span>
             ))}
           </button>
@@ -186,8 +204,8 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
         <button className="link" onClick={onOpenCalendar}>Все</button>
       </div>
       <div className="card tight">
-        {events.length === 0 && <p className="hint">Добавь аренду и кредит в «Ещё → Регулярные платежи».</p>}
-        {events.map((e, i) => <EventRow key={i} e={e} data={data} today={today} />)}
+        {items.length === 0 && <p className="hint">Добавь аренду и кредит в «Ещё → Регулярные платежи».</p>}
+        {items.map((it, i) => 'plan' in it ? <EventRow key={i} e={it.plan} data={data} today={today} /> : <BondEventRow key={i} e={it.bond} today={today} />)}
       </div>
 
       {recent.length > 0 && (
@@ -210,6 +228,20 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
           </div>
         </>
       )}
+      {bondEvent && <BondEventSheet data={data} event={bondEvent} onClose={() => setBondEvent(null)} />}
+    </div>
+  )
+}
+
+export function BondEventRow({ e, today }: { e: BondEvent; today: string }) {
+  return (
+    <div className="row">
+      <Badge icon="percent" tone="income" />
+      <div className="body">
+        <div className="title">{e.kind === 'coupon' ? 'Купон' : 'Погашение'} {e.shortName}</div>
+        <div className="sub">{[shortDate(e.date), inDays(e.date, today), `${e.qty} шт.`].filter(Boolean).join(' · ')}</div>
+      </div>
+      <div className="amt pos">{e.amount != null ? <>{e.estimated ? '≈ ' : ''}+<Money v={e.amount} round /></> : <span className="muted small">не объявлен</span>}</div>
     </div>
   )
 }

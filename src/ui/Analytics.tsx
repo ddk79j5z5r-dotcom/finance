@@ -38,7 +38,11 @@ export function Analytics({ data, initialMode = 'expense', onOpenOps }: { data: 
   const pairMonths = Array.from({ length: barCount }, (_, i) => shiftMonth(month, i - barCount + 1))
   const pairs = pairMonths.map(m => ({ month: m, ...monthTotals(data.txs, m) }))
   const sel = pairs.find(p => p.month === month)
+  // Переоценка облигаций (рынок − вложено) известна только на сегодня — добавляется к текущему месяцу.
+  const revaluation = data.bondPositions.reduce((s, p) => s + p.value - p.invested, 0)
+  const thisMonth = monthOf(todayISO())
   const capital = capitalByMonth(data.accounts, data.txs, pairMonths, (v, a) => data.toRub(v, a.currency) ?? 0)
+    .map((v, i) => (pairMonths[i] >= thisMonth ? v + revaluation : v))
 
   const periodLabel = period === 'month' ? monthLabel(month) : `${monthLabel(from)} — ${monthLabel(month)}`
 

@@ -135,6 +135,7 @@ describe('распределение поступлений (реальный с
   it('сумма сбережений по факту — переводы на счёт целей', () => {
     const s = bucketStates({
       categories: cats, limits: [], allocations: [], goals,
+      accounts: [{ id: 5, name: 'Накопительный', currency: 'RUB', openingBalance: 0, archived: false, order: 0 }],
       txs: [tx({ type: 'transfer', date: '2026-10-14', accountId: 1, amount: R(8000), rub: R(8000), toAccountId: 5, toAmount: R(8000), toRub: R(8000) })],
     }, '2026-10', settings)
     expect(s.savings.spent).toBe(R(8000))

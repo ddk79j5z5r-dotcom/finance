@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
+import type { Bond, BondMark, Trade } from './domain/bonds'
 import type { Account, Allocation, Category, Goal, Limit, Rate, Recurring, Settings, Tx } from './domain/types'
 import { DEFAULT_SETTINGS } from './domain/types'
 
@@ -25,6 +26,9 @@ export class FinanceDB extends Dexie {
   rates!: EntityTable<Rate, 'date'>
   settings!: EntityTable<SettingsRow, 'key'>
   lock!: EntityTable<LockRow, 'key'>
+  bonds!: EntityTable<Bond, 'secid'>
+  trades!: EntityTable<Trade, 'id'>
+  bondMarks!: EntityTable<BondMark, 'key'>
 
   constructor(name = 'finance') {
     super(name)
@@ -39,6 +43,12 @@ export class FinanceDB extends Dexie {
       rates: 'date',
       settings: 'key',
       lock: 'key',
+    })
+    // v2: облигации — кэш данных биржи, сделки и пропущенные события.
+    this.version(2).stores({
+      bonds: 'secid',
+      trades: '++id, accountId, secid, date',
+      bondMarks: 'key',
     })
   }
 }
@@ -56,5 +66,5 @@ export async function saveSettings(patch: Partial<Settings>, d: FinanceDB = db) 
 }
 
 /** Все таблицы, которые входят в бэкап. */
-export const BACKUP_TABLES = ['accounts', 'categories', 'txs', 'limits', 'recurring', 'goals', 'allocations', 'rates', 'settings'] as const
+export const BACKUP_TABLES = ['accounts', 'categories', 'txs', 'limits', 'recurring', 'goals', 'allocations', 'rates', 'settings', 'trades', 'bonds', 'bondMarks'] as const
 export type BackupTable = (typeof BACKUP_TABLES)[number]

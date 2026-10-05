@@ -3,7 +3,8 @@ import { plannedInMonth } from '../domain/calc'
 import { monthLabel, monthOf, shiftMonth, todayISO } from '../domain/money'
 import { Money, MonthNav } from './common'
 import { txView, type Data } from './data'
-import { EventRow } from './Home'
+import { BondEventRow, EventRow } from './Home'
+import { bondEvents } from '../domain/bonds'
 import { Badge } from './icons'
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
@@ -23,8 +24,11 @@ export function Calendar({ data }: { data: Data }) {
   })
 
   const events = plannedInMonth(data.recurring, data.settings, month)
+  const lastDay = `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`
+  const bondEv = bondEvents(data.trades, data.bonds, `${month}-01`, lastDay, data.taxFree)
   const txDays = new Set(data.txs.filter(t => monthOf(t.date) === month).map(t => t.date))
   const dayEvents = selected ? events.filter(e => e.date === selected) : events
+  const dayBond = selected ? bondEv.filter(e => e.date === selected) : bondEv
   const dayTxs = selected ? data.txs.filter(t => t.date === selected) : []
 
   function go(delta: number) {
@@ -42,6 +46,7 @@ export function Calendar({ data }: { data: Data }) {
           {cells.map(d => {
             const inMonth = monthOf(d) === month
             const ev = inMonth ? events.filter(e => e.date === d) : []
+            const bev = inMonth && bondEv.some(e => e.date === d)
             const cls = [!inMonth && 'out', d === today && 'today', d === selected && 'sel'].filter(Boolean).join(' ')
             return (
               <button key={d} className={cls} disabled={!inMonth} onClick={() => setSelected(s => (s === d ? null : d))}
@@ -49,8 +54,8 @@ export function Calendar({ data }: { data: Data }) {
                 {Number(d.slice(8))}
                 <span className="dots">
                   {ev.some(e => e.kind === 'payment') && <i className="dot-pay" />}
-                  {ev.some(e => e.kind !== 'payment') && <i className="dot-inc" />}
-                  {inMonth && !ev.length && txDays.has(d) && <i className="dot-tx" />}
+                  {(ev.some(e => e.kind !== 'payment') || bev) && <i className="dot-inc" />}
+                  {inMonth && !ev.length && !bev && txDays.has(d) && <i className="dot-tx" />}
                 </span>
               </button>
             )
@@ -58,7 +63,7 @@ export function Calendar({ data }: { data: Data }) {
         </div>
         <div className="legend">
           <span><i style={{ background: 'var(--neg)' }} />платёж</span>
-          <span><i style={{ background: 'var(--pos)' }} />выплата</span>
+          <span><i style={{ background: 'var(--pos)' }} />выплата, купон</span>
           <span><i style={{ background: 'var(--muted)' }} />были операции</span>
         </div>
       </div>
@@ -68,8 +73,10 @@ export function Calendar({ data }: { data: Data }) {
         {selected && <button className="link" onClick={() => setSelected(null)}>Весь месяц</button>}
       </div>
       <div className="card tight">
-        {dayEvents.length === 0 && dayTxs.length === 0 && <p className="hint">Ничего не запланировано.</p>}
-        {dayEvents.map((e, i) => <EventRow key={i} e={e} data={data} today={today} />)}
+        {dayEvents.length === 0 && dayBond.length === 0 && dayTxs.length === 0 && <p className="hint">Ничего не запланировано.</p>}
+        {[...dayEvents.map(e => ({ date: e.date, el: <EventRow key={`p${e.date}${e.kind === 'payment' ? e.recurring.id : e.kind}`} e={e} data={data} today={today} /> })),
+          ...dayBond.map(e => ({ date: e.date, el: <BondEventRow key={e.key} e={e} today={today} /> }))]
+          .sort((a, b) => a.date.localeCompare(b.date)).map(x => x.el)}
         {dayTxs.map(t => {
           const v = txView(data, t)
           const acc = data.accounts.find(a => a.id === t.accountId)

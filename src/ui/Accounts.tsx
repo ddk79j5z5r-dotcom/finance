@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { db, saveSettings } from '../db'
-import { accountKind, monthsUntil } from '../domain/calc'
+import { accountKind, isSavingsAccount, monthsUntil } from '../domain/calc'
+import type { Position } from '../domain/bonds'
+import { AddBondSheet, BondList, PositionSheet } from './Bonds'
 import { formatMoney, monthGenitive, monthOf, todayISO } from '../domain/money'
 import { ACCOUNT_COLORS, CURRENCIES, type Account, type AccountColor, type AccountKind, type Currency, type Goal } from '../domain/types'
 import { AccountBadge, COLOR_LABEL } from './AccountBadge'
@@ -13,8 +15,10 @@ import { notify } from './undo'
 export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFilter) => void }) {
   const [editAcc, setEditAcc] = useState<Partial<Account> | null>(null)
   const [editGoal, setEditGoal] = useState<Partial<Goal> | null>(null)
+  const [addBondTo, setAddBondTo] = useState<number | null>(null)
+  const [position, setPosition] = useState<Position | null>(null)
   const accounts = activeAccounts(data.accounts)
-  const totalRub = accounts.reduce((s, a) => s + (data.toRub(data.bal.get(a.id!) ?? 0, a.currency) ?? 0), 0)
+  const totalRub = accounts.reduce((s, a) => s + (data.toRub(data.value.get(a.id!) ?? 0, a.currency) ?? 0), 0)
   const groups: [string, Account[]][] = [
     ['Карты', accounts.filter(a => accountKind(a) === 'card')],
     ['Копилки', accounts.filter(a => accountKind(a) === 'savings')],
@@ -33,7 +37,7 @@ export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFi
         <div key={title}>
           <div className="section-title"><h3>{title}</h3>{gi === 0 && <span className="muted small">нажми — операции счёта</span>}</div>
           {list.map(a => {
-            const b = data.bal.get(a.id!) ?? 0
+            const b = data.value.get(a.id!) ?? 0
             const goals = data.progress.filter(p => p.goal.accountId === a.id)
             return (
               <div className="card" key={a.id} style={{ paddingTop: 4, paddingBottom: goals.length ? 10 : 4 }}>
@@ -51,6 +55,12 @@ export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFi
                   </button>
                   <button className="icon-btn" aria-label={`Настроить счёт ${a.name}`} onClick={() => setEditAcc(a)}><Icon name="edit" size={18} /></button>
                 </div>
+                {(data.bondValue.get(a.id!) ?? 0) > 0 && (
+                  <div className="muted small" style={{ margin: '-4px 0 4px 52px' }}>
+                    деньги <Money v={data.bal.get(a.id!) ?? 0} round /> · облигации <Money v={data.bondValue.get(a.id!) ?? 0} round />
+                  </div>
+                )}
+                <BondList data={data} accountId={a.id!} onOpen={setPosition} />
                 {goals.map(p => {
                   const plan = data.goalPlans.get(p.goal.id!)
                   return (
@@ -71,7 +81,10 @@ export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFi
                   )
                 })}
                 {accountKind(a) === 'savings' && (
-                  <button className="link small" style={{ padding: '6px 0' }} onClick={() => setEditGoal({ accountId: a.id })}>+ цель на этом счёте</button>
+                  <div style={{ display: 'flex', gap: 18 }}>
+                    <button className="link small" style={{ padding: '6px 0' }} onClick={() => setEditGoal({ accountId: a.id })}>+ цель</button>
+                    {a.currency === 'RUB' && <button className="link small" style={{ padding: '6px 0' }} onClick={() => setAddBondTo(a.id!)}>+ облигация</button>}
+                  </div>
                 )}
               </div>
             )
@@ -82,6 +95,8 @@ export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFi
 
       {editAcc && <AccountSheet data={data} acc={editAcc} onClose={() => setEditAcc(null)} />}
       {editGoal && <GoalSheet data={data} goal={editGoal} onClose={() => setEditGoal(null)} />}
+      {addBondTo != null && <AddBondSheet data={data} accountId={addBondTo} onClose={() => setAddBondTo(null)} />}
+      {position && <PositionSheet data={data} position={position} onClose={() => setPosition(null)} />}
     </div>
   )
 }
@@ -96,6 +111,9 @@ function AccountSheet({ data, acc, onClose }: { data: Data; acc: Partial<Account
   const [kind, setKind] = useState<AccountKind>(acc.id != null ? accountKind(acc as Account) : 'card')
   const [color, setColor] = useState<AccountColor>(acc.id != null ? data.colorOf(acc as Account) : 'blue')
   const [showOnHome, setShowOnHome] = useState(!!acc.showOnHome)
+  const [savings, setSavings] = useState(acc.id != null ? isSavingsAccount(acc as Account, data.goals) : false)
+  const [taxFree, setTaxFree] = useState(!!acc.taxFree)
+  const hasBonds = acc.id != null && data.trades.some(t => t.accountId === acc.id)
   const used = acc.id != null && data.txs.some(t => t.accountId === acc.id || t.toAccountId === acc.id)
 
   const save = useOnce(async () => {
@@ -104,7 +122,7 @@ function AccountSheet({ data, acc, onClose }: { data: Data; acc: Partial<Account
       ...(acc as Account), name: name.trim(), currency, openingBalance: fromInput(now) == null && current !== 0
         ? acc.openingBalance ?? 0 // поле очистили при отрицательном балансе — ничего не меняем
         : (acc.openingBalance ?? 0) + ((fromInput(now) ?? 0) - current),
-      archived: acc.archived ?? false, order: acc.order ?? data.accounts.length, kind, color, showOnHome,
+      archived: acc.archived ?? false, order: acc.order ?? data.accounts.length, kind, color, showOnHome, savings, taxFree,
     })
     if (isDefault) await saveSettings({ defaultAccountId: id })
     onClose()
@@ -121,7 +139,7 @@ function AccountSheet({ data, acc, onClose }: { data: Data; acc: Partial<Account
       <input value={name} onChange={e => setName(e.target.value)} placeholder="Т-Банк, Наличные, Накопительный…" autoFocus={!acc.id} />
       <label className="field-label">Валюта</label>
       {used ? <div>{currency}</div> : <Chips options={CURRENCIES.map(c => ({ value: c, label: c }))} value={currency} onChange={setCurrency} />}
-      <label className="field-label">Сейчас на счёте</label>
+      <label className="field-label">{hasBonds ? 'Свободные деньги на счёте (без облигаций)' : 'Сейчас на счёте'}</label>
       <AmountInput value={now} onChange={setNow} suffix={CUR_SUFFIX[currency]} />
       <p className="hint">
         {acc.id ? 'Если не совпадает с банком — введи реальную сумму, история операций не изменится.' : 'Сколько на счёте прямо сейчас.'}
@@ -139,6 +157,11 @@ function AccountSheet({ data, acc, onClose }: { data: Data; acc: Partial<Account
         ))}
       </div>
       <label className="check"><input type="checkbox" checked={showOnHome} onChange={e => setShowOnHome(e.target.checked)} /> Показывать на главной под балансом</label>
+      <label className="check"><input type="checkbox" checked={savings} onChange={e => setSavings(e.target.checked)} /> Сбережения в 50/30/20</label>
+      <p className="hint" style={{ marginTop: 4 }}>Переводы на этот счёт и купоны/проценты на нём считаются сбережениями. Для копилок под платежи (аренда, кредит) — выключи.</p>
+      {(kind === 'savings' || hasBonds) && (
+        <label className="check"><input type="checkbox" checked={taxFree} onChange={e => setTaxFree(e.target.checked)} /> Купоны без удержания налога (ИИС)</label>
+      )}
       <label className="check"><input type="checkbox" checked={isDefault} onChange={e => setIsDefault(e.target.checked)} /> Основной счёт для ввода</label>
       <button className="save" onClick={save}>Сохранить</button>
       {acc.id && <button className="danger" onClick={archive}>Скрыть счёт</button>}

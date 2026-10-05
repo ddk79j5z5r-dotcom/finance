@@ -3,6 +3,7 @@ import { db, getSettings } from '../db'
 import { convertToRub } from '../domain/rates'
 import { accountColor, balances, goalMonthPlans, goalProgress, rootOf } from '../domain/calc'
 import { monthOf, todayISO } from '../domain/money'
+import { bondValueByAccount, pendingBondEvents, positions } from '../domain/bonds'
 import type { Account, Bucket, Category, Currency, Rate, Tx } from '../domain/types'
 import { INCOME_LABEL } from '../domain/types'
 import { categoryIcon, INCOME_ICON, type IconName } from './icons'
@@ -10,7 +11,7 @@ import { categoryIcon, INCOME_ICON, type IconName } from './icons'
 /** Все данные приложения одним запросом; объёмы для личного учёта небольшие. */
 export function useData() {
   return useLiveQuery(async () => {
-    const [accounts, categories, txs, limits, recurring, goals, allocations, settings, rate, lock] = await Promise.all([
+    const [accounts, categories, txs, limits, recurring, goals, allocations, settings, rate, lock, trades, bonds, bondMarks] = await Promise.all([
       db.accounts.orderBy('order').toArray(),
       db.categories.toArray(),
       db.txs.orderBy('date').toArray(),
@@ -21,9 +22,19 @@ export function useData() {
       getSettings(),
       db.rates.orderBy('date').last(),
       db.lock.get('lock'),
+      db.trades.orderBy('date').toArray(),
+      db.bonds.toArray(),
+      db.bondMarks.toArray(),
     ])
-    const bal = balances(accounts, txs)
-    const progress = goalProgress(goals, bal)
+    const today = todayISO()
+    const bal = balances(accounts, txs, trades)
+    const bondPositions = positions(trades, bonds, txs, today)
+    const bondValue = bondValueByAccount(bondPositions)
+    // Стоимость счёта: свободные деньги + облигации по рынку (с НКД).
+    const value = new Map([...bal].map(([id, v]) => [id, v + (bondValue.get(id) ?? 0)]))
+    const taxFree = (id: number) => !!accounts.find(a => a.id === id)?.taxFree
+    const pendingBond = pendingBondEvents(trades, bonds, txs, bondMarks, today, taxFree)
+    const progress = goalProgress(goals, value)
     const accCurrency = new Map(accounts.map(a => [a.id!, a.currency]))
     const latestRate = rate ?? null
     const toRub = (amount: number, currency: Currency) => convertToRub(amount, currency, latestRate)
@@ -38,6 +49,7 @@ export function useData() {
     return {
       accounts, categories, txs, limits, recurring, goals, allocations, settings, latestRate, bal, progress, toRub,
       goalRemainingRub, goalPlans, goalMonthLeftRub, lockEnabled, colorOf,
+      trades, bonds, bondPositions, bondValue, value, taxFree, pendingBond,
     }
   })
 }

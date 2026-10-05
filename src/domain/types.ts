@@ -25,6 +25,10 @@ export interface Account {
   color?: AccountColor
   /** Показывать под общим балансом на главной. */
   showOnHome?: boolean
+  /** Учитывать в 50/30/20 как сбережения. Не задано — да, если на счёте есть цель. */
+  savings?: boolean
+  /** С купонов не удерживается налог (например, ИИС). */
+  taxFree?: boolean
 }
 
 export const ACCOUNT_COLORS = ['yellow', 'green', 'blue', 'sky', 'orange', 'pink', 'violet', 'gray'] as const
@@ -59,6 +63,9 @@ export interface Tx {
   toRub?: number
   comment: string
   createdAt: number
+  /** Купон по облигации: бумага и ключ события (чтобы не предлагать его снова). */
+  secid?: string
+  eventKey?: string
 }
 
 /** Лимит конверта (категории верхнего уровня) начиная с месяца; действует до следующей записи. */

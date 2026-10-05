@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import App from './App.tsx'
+import { refreshBonds } from './bondsSync'
 import { db } from './db'
 import { refreshLatestRate } from './domain/rates'
 import { seedIfEmpty } from './domain/seed'
@@ -25,4 +26,6 @@ seedIfEmpty(db).then(() => {
     </StrictMode>,
   )
   refreshLatestRate(db)
+  refreshBonds()
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshBonds() })
 })
