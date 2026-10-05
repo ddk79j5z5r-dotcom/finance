@@ -76,3 +76,19 @@ export function evalAmount(expr: string): number | null {
 }
 
 export const hasOperator = (expr: string) => /[+−-]/.test(expr.replace(/^[+−-]/, ''))
+
+/** Русское склонение по числу: plural(2, ['операция', 'операции', 'операций']) → «операции». */
+export function plural(n: number, forms: [string, string, string]): string {
+  const a = Math.abs(n) % 100, b = a % 10
+  if (a > 10 && a < 20) return forms[2]
+  if (b > 1 && b < 5) return forms[1]
+  if (b === 1) return forms[0]
+  return forms[2]
+}
+
+const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+/** «2027-06» → «июня 2027» (для «к концу …»). */
+export function monthGenitive(month: string): string {
+  const [y, m] = month.split('-').map(Number)
+  return `${MONTHS_GEN[m - 1]} ${y}`
+}

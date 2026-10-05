@@ -4,12 +4,13 @@ import { bucketStates, envelopes, isPaid, planIncome } from '../domain/calc'
 import { formatMoney, monthLabel, monthOf, shiftMonth, todayISO } from '../domain/money'
 import { BUCKET_LABEL, BUCKETS, INCOME_LABEL, type Category, type Recurring, type Tx } from '../domain/types'
 import { AmountInput, Bar, fromInput, Money, MonthNav, Sheet, toInput, useOnce } from './common'
+import { AccountBadge } from './AccountBadge'
 import type { Data } from './data'
+import type { OpsFilter } from './History'
 import { Badge, categoryIcon, Icon } from './icons'
 
-export function Budget({ data, onDistribute }: { data: Data; onDistribute: (t: Tx) => void }) {
+export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistribute: (t: Tx) => void; onOpenOps: (f: OpsFilter) => void }) {
   const [month, setMonth] = useState(monthOf(todayISO()))
-  const [limitFor, setLimitFor] = useState<Category | null>(null)
   const [pay, setPay] = useState<Recurring | null>(null)
 
   const buckets = bucketStates(data, month, data.settings)
@@ -21,6 +22,11 @@ export function Budget({ data, onDistribute }: { data: Data; onDistribute: (t: T
   const allocated = new Set(data.allocations.map(a => a.txId))
   const pending = data.txs.filter(t => t.type === 'income' && monthOf(t.date) === month && !allocated.has(t.id!))
   const noExpected = !data.settings.expectedSalary && !data.settings.expectedAdvance
+  const active = data.recurring.filter(r => r.active)
+  const payments = active.filter(r => r.kind !== 'topup').sort((a, b) => a.day - b.day)
+  const topups = active.filter(r => r.kind === 'topup')
+  const fundLabel = (r: Recurring) => r.fundFrom === 'both' ? 'пополам из зарплаты и аванса'
+    : r.fundFrom === 'salary' ? `из зарплаты ${data.settings.salaryDay}-го` : `из аванса ${data.settings.advanceDay}-го`
   const paid = (r: Recurring) => isPaid(r, data.txs, month, x => data.toRub(x.amount, x.currency) ?? x.amount)
   // С лимитом — сверху, по доле израсходованного; без лимита — ниже, по сумме трат.
   const sorted = [...envs].sort((a, b) => {
@@ -78,12 +84,12 @@ export function Budget({ data, onDistribute }: { data: Data; onDistribute: (t: T
         })}
       </div>
 
-      <div className="section-title"><h3>Категории</h3><span className="muted small">нажми, чтобы задать лимит</span></div>
+      <div className="section-title"><h3>Категории</h3><span className="muted small">нажми — траты и лимит</span></div>
       <div className="card tight">
         {sorted.map(e => {
           const cap = e.limit + Math.max(0, e.carry)
           return (
-            <button className="row" key={e.category.id} onClick={() => setLimitFor(e.category)}>
+            <button className="row" key={e.category.id} onClick={() => onOpenOps({ categoryId: e.category.id, from: month, to: month })}>
               <Badge icon={categoryIcon(e.category)} tone={e.category.bucket} />
               <div className="body">
                 <div className="line" style={{ padding: 0 }}>
@@ -107,18 +113,15 @@ export function Budget({ data, onDistribute }: { data: Data; onDistribute: (t: T
 
       <div className="section-title"><h3>Регулярные платежи</h3></div>
       <div className="card tight">
-        {data.recurring.length === 0 && <p className="hint">Добавь аренду и кредит в «Ещё → Регулярные платежи».</p>}
-        {data.recurring.filter(r => r.active).sort((a, b) => a.day - b.day).map(r => {
+        {payments.length === 0 && <p className="hint">Добавь аренду и кредит в «Ещё → Регулярные платежи».</p>}
+        {payments.map(r => {
           const done = paid(r)
           return (
             <div className="row" key={r.id}>
               <Badge icon={categoryIcon(data.categories.find(c => c.id === r.categoryId))} tone="needs" />
               <div className="body">
                 <div className="title">{r.name} · {r.day}-го</div>
-                <div className="sub">
-                  из {r.fundFrom === 'salary' ? `зарплаты ${data.settings.salaryDay}-го` : `аванса ${data.settings.advanceDay}-го`}
-                  {r.reserveAccountId != null && ` → ${data.accounts.find(a => a.id === r.reserveAccountId)?.name ?? ''}`}
-                </div>
+                <div className="sub">{fundLabel(r)}{r.reserveAccountId != null && ` → ${data.accounts.find(a => a.id === r.reserveAccountId)?.name ?? ''}`}</div>
               </div>
               <div className="amt">
                 <Money v={r.amount} cur={r.currency} />
@@ -131,13 +134,37 @@ export function Budget({ data, onDistribute }: { data: Data; onDistribute: (t: T
         })}
       </div>
 
-      {limitFor && <LimitSheet data={data} category={limitFor} month={month} onClose={() => setLimitFor(null)} />}
+      {topups.length > 0 && (
+        <>
+          <div className="section-title"><h3>Пополнения копилок</h3></div>
+          <div className="card tight">
+            {topups.map(r => {
+              const acc = data.accounts.find(a => a.id === r.reserveAccountId)
+              const inMonth = data.txs.filter(t => t.type === 'transfer' && t.toAccountId === r.reserveAccountId && monthOf(t.date) === month).reduce((s, t) => s + (t.toAmount ?? t.amount), 0)
+              return (
+                <div className="row" key={r.id}>
+                  {acc ? <AccountBadge account={acc} color={data.colorOf(acc)} /> : <Badge icon="target" tone="savings" />}
+                  <div className="body">
+                    <div className="title">{acc?.name ?? r.name}</div>
+                    <div className="sub">{fundLabel(r)}</div>
+                  </div>
+                  <div className="amt">
+                    <Money v={r.amount} cur={r.currency} round />
+                    <div className={`small ${inMonth >= r.amount ? 'pos' : 'muted'}`}>{inMonth >= r.amount ? '✓ пополнено' : <>внесено <Money v={inMonth} round /></>}</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+
       {pay && <PaySheet data={data} r={pay} onClose={() => setPay(null)} />}
     </div>
   )
 }
 
-function LimitSheet({ data, category, month, onClose }: { data: Data; category: Category; month: string; onClose: () => void }) {
+export function LimitSheet({ data, category, month, onClose }: { data: Data; category: Category; month: string; onClose: () => void }) {
   const cur = envelopes(data.categories, data.limits, data.txs, month).find(e => e.category.id === category.id)
   const [value, setValue] = useState(toInput(cur?.limit))
   const save = useOnce(async () => {

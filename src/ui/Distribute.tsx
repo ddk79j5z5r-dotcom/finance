@@ -11,7 +11,10 @@ const dayLabel = (d: number) => `${d}-го`
 export function Distribute({ data, tx, onClose }: { data: Data; tx: Tx; onClose: () => void }) {
   const d = useMemo(() => suggestDistribution(
     tx,
-    { txs: data.txs, allocations: data.allocations, recurring: data.recurring, goals: data.goals, goalRemainingRub: data.goalRemainingRub },
+    {
+      txs: data.txs, allocations: data.allocations, recurring: data.recurring, goals: data.goals, categories: data.categories,
+      goalRemainingRub: data.goalRemainingRub, goalMonthLeftRub: data.goalMonthLeftRub,
+    },
     data.settings,
     r => data.toRub(r.amount, r.currency) ?? 0,
   ), [tx, data])
@@ -25,7 +28,7 @@ export function Distribute({ data, tx, onClose }: { data: Data; tx: Tx; onClose:
   const kind = tx.incomeKind!
   const acc = data.accounts.find(a => a.id === tx.accountId)
   // Цели пересчитываются, если сумму сбережений поправили вручную.
-  const goals = suggestGoals(parsed.savings, data.goals, data.goalRemainingRub)
+  const goals = suggestGoals(parsed.savings, data.goals, data.goalRemainingRub, data.goalMonthLeftRub)
   const transfers = transfersFor({ ...d, goalSuggestions: goals }, tx.accountId)
     .filter(t => data.accounts.find(a => a.id === t.accountId)?.currency === acc?.currency)
   const [makeTransfers, setMakeTransfers] = useState(true)
@@ -55,7 +58,7 @@ export function Distribute({ data, tx, onClose }: { data: Data; tx: Tx; onClose:
           <h3>Сначала резерв</h3>
           {d.reserves.map(r => (
             <div className="line" key={r.recurring.id}>
-              <span>{r.recurring.name} <span className="muted">· {dayLabel(r.recurring.day)}</span></span>
+              <span>{r.recurring.name} <span className="muted">· {r.recurring.kind === 'topup' ? 'пополнение' : dayLabel(r.recurring.day)}{r.recurring.fundFrom === 'both' ? ', половина' : ''}</span></span>
               <Money v={r.rub} />
             </div>
           ))}

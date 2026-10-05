@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react'
 import { capitalByMonth, incomeByKind, monthTotals, savingsRate, spendByRoot } from '../domain/calc'
 import { formatMoney, monthLabel, monthOf, shiftMonth, todayISO } from '../domain/money'
-import { INCOME_LABEL } from '../domain/types'
+import { INCOME_LABEL, type IncomeKind } from '../domain/types'
 import { Money, MonthNav, Segmented, useAmountsHidden } from './common'
 import type { Data } from './data'
+import type { OpsFilter } from './History'
 
 export type Mode = 'expense' | 'income'
 type Period = 'month' | 'quarter' | 'year'
@@ -15,7 +16,7 @@ const SHORT_MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн'
 
 interface Slice { key: string; label: string; rub: number; color: string }
 
-export function Analytics({ data, initialMode = 'expense' }: { data: Data; initialMode?: Mode }) {
+export function Analytics({ data, initialMode = 'expense', onOpenOps }: { data: Data; initialMode?: Mode; onOpenOps: (f: OpsFilter) => void }) {
   const [mode, setMode] = useState<Mode>(initialMode)
   const [period, setPeriod] = useState<Period>('month')
   const [month, setMonth] = useState(monthOf(todayISO()))
@@ -79,11 +80,14 @@ export function Analytics({ data, initialMode = 'expense' }: { data: Data; initi
       {total > 0 && (
         <div className="card tight">
           {slices.map(s => (
-            <div className="row" key={s.key}>
+            <button className="row" key={s.key} onClick={() => onOpenOps({
+              from, to: month,
+              ...(s.key.startsWith('c') ? { categoryId: Number(s.key.slice(1)) } : s.key !== 'other' ? { incomeKind: s.key as IncomeKind } : {}),
+            })}>
               <span style={{ width: 10, height: 10, borderRadius: 3, background: s.color, flex: 'none' }} />
               <div className="body title">{s.label}</div>
               <div className="amt"><Money v={s.rub} round /><div className="sub">{Math.round((s.rub / total) * 100)}%</div></div>
-            </div>
+            </button>
           ))}
         </div>
       )}

@@ -21,7 +21,14 @@ export interface Account {
   order: number
   /** Карта (с неё платим) или копилка (там лежат отложенные деньги). Не задано — угадывается по названию. */
   kind?: AccountKind
+  /** Цвет из ACCOUNT_COLORS; не задан — подбирается по названию. */
+  color?: AccountColor
+  /** Показывать под общим балансом на главной. */
+  showOnHome?: boolean
 }
+
+export const ACCOUNT_COLORS = ['yellow', 'green', 'blue', 'sky', 'orange', 'pink', 'violet', 'gray'] as const
+export type AccountColor = (typeof ACCOUNT_COLORS)[number]
 
 export type AccountKind = 'card' | 'savings'
 
@@ -33,6 +40,8 @@ export interface Category {
   archived: boolean
   /** Служебная категория для разницы курса при обмене валют. */
   system?: 'fx'
+  /** Счёт, который подставляется при выборе этой категории. */
+  accountId?: number | null
 }
 
 export interface Tx {
@@ -62,12 +71,15 @@ export interface Limit {
 
 export interface Recurring {
   id?: number
+  /** payment — платёж в день месяца; topup — ежемесячное пополнение копилки (без даты). */
+  kind?: 'payment' | 'topup'
   name: string
   amount: number
   currency: Currency
   day: number
   categoryId: number
-  fundFrom: 'salary' | 'advance'
+  /** Из какой выплаты резервировать; both — пополам из зарплаты и аванса. */
+  fundFrom: 'salary' | 'advance' | 'both'
   /** Счёт-копилка, где копятся деньги на этот платёж (например, «Квартира»). */
   reserveAccountId?: number | null
   active: boolean
@@ -79,6 +91,8 @@ export interface Goal {
   target: number // в валюте счёта
   accountId: number
   priority: number
+  /** Необязательный срок YYYY-MM: к концу этого месяца цель должна быть собрана. */
+  deadline?: string | null
 }
 
 /** Как распределено конкретное поступление (₽). */
@@ -106,6 +120,8 @@ export interface Settings {
   expectedAdvance: number
   defaultAccountId: number | null
   lastExportAt: number | null
+  categoriesReviewed?: boolean
+  setupDismissed?: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -130,5 +146,5 @@ export const INCOME_LABEL: Record<IncomeKind, string> = {
   bonus: 'Премия',
   interest: 'Проценты',
   gift: 'От родителей',
-  other: 'Другое',
+  other: 'Прочие поступления',
 }

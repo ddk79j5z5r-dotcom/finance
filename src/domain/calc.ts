@@ -1,6 +1,6 @@
 import { monthOf, shiftMonth } from './money'
-import type { Account, AccountKind, Allocation, Bucket, Category, Goal, IncomeKind, Limit, Recurring, Settings, Tx } from './types'
-import { BUCKETS, REGULAR_INCOME } from './types'
+import type { Account, AccountColor, AccountKind, Allocation, Bucket, Category, Goal, IncomeKind, Limit, Recurring, Settings, Tx } from './types'
+import { ACCOUNT_COLORS, BUCKETS, REGULAR_INCOME } from './types'
 
 // ---------- Балансы ----------
 
@@ -136,6 +136,25 @@ export function savedInMonth(txs: Tx[], goals: Goal[], month: string): number {
   return s
 }
 
+/** Тип траты: по самой категории операции (у подкатегории может быть свой тип, отличный от родителя). */
+export function bucketOf(categories: Category[], id: number | null | undefined): Bucket | undefined {
+  return categories.find(c => c.id === id)?.bucket ?? rootOf(categories, id)?.bucket
+}
+
+/** Траты месяца по типам (₽) с учётом типа подкатегорий; разница курса — по типу своей служебной категории. */
+export function spentByBucket(categories: Category[], txs: Tx[], month: string): Record<Bucket, number> {
+  const res = { needs: 0, wants: 0, savings: 0 }
+  const fx = categories.find(c => c.system === 'fx')
+  for (const t of txs) {
+    if (monthOf(t.date) !== month) continue
+    if (t.type === 'expense') {
+      const b = bucketOf(categories, t.categoryId)
+      if (b) res[b] += t.rub
+    } else if (t.type === 'transfer' && fx) res[fx.bucket] += fxLoss(t)
+  }
+  return res
+}
+
 export function bucketStates(
   data: { categories: Category[]; limits: Limit[]; txs: Tx[]; allocations: Allocation[]; goals: Goal[] },
   month: string,
@@ -143,6 +162,7 @@ export function bucketStates(
 ): Record<Bucket, BucketState> {
   const targets = bucketTargets(planIncome(data.txs, month, settings), settings)
   const envs = envelopes(data.categories, data.limits, data.txs, month)
+  const spent = spentByBucket(data.categories, data.txs, month)
   const res = {} as Record<Bucket, BucketState>
   for (const b of BUCKETS) {
     const own = envs.filter(e => e.category.bucket === b)
@@ -150,7 +170,7 @@ export function bucketStates(
       target: targets[b],
       planned: own.reduce((s, e) => s + e.limit, 0),
       allocated: data.allocations.filter(a => a.month === month).reduce((s, a) => s + a[b], 0),
-      spent: own.reduce((s, e) => s + e.spent, 0),
+      spent: spent[b],
     }
   }
   res.savings.spent += savedInMonth(data.txs, data.goals, month)
@@ -162,6 +182,7 @@ export function bucketStates(
 export interface Reserve {
   recurring: Recurring
   rub: number
+  bucket: Bucket
 }
 
 export interface Distribution {
@@ -192,8 +213,11 @@ function splitByWeights(total: number, weights: Record<Bucket, number>): Record<
  */
 export function suggestDistribution(
   tx: Tx,
-  /** goalRemainingRub — сколько рублей осталось до каждой цели. */
-  data: { txs: Tx[]; allocations: Allocation[]; recurring: Recurring[]; goals: Goal[]; goalRemainingRub: Map<number, number> },
+  /** goalRemainingRub — сколько рублей осталось до каждой цели; goalMonthLeftRub — сколько ещё нужно в этом месяце целям со сроком. */
+  data: {
+    txs: Tx[]; allocations: Allocation[]; recurring: Recurring[]; goals: Goal[]; categories?: Category[]
+    goalRemainingRub: Map<number, number>; goalMonthLeftRub?: Map<number, number>
+  },
   settings: Settings,
   recurringToRub: (r: Recurring) => number,
 ): Distribution {
@@ -205,8 +229,13 @@ export function suggestDistribution(
 
   if (REGULAR_INCOME.includes(kind)) {
     reserves = data.recurring
-      .filter(r => r.active && r.fundFrom === kind)
-      .map(r => ({ recurring: r, rub: recurringToRub(r) }))
+      .filter(r => r.active && (r.fundFrom === kind || r.fundFrom === 'both'))
+      .map(r => {
+        const full = recurringToRub(r)
+        return { recurring: r, rub: r.fundFrom === 'both' ? Math.round(full / 2) : full, bucket: bucketOf(data.categories ?? [], r.categoryId) ?? 'needs' }
+      })
+    const reservedBy = { needs: 0, wants: 0, savings: 0 }
+    for (const r of reserves) reservedBy[r.bucket] += r.rub
     const reserved = reserves.reduce((s, r) => s + r.rub, 0)
     const free = Math.max(0, income - reserved)
 
@@ -217,9 +246,9 @@ export function suggestDistribution(
       for (const b of BUCKETS) already[b] += a[b]
     }
     const gap = {
-      needs: Math.max(0, targets.needs - already.needs - reserved),
-      wants: Math.max(0, targets.wants - already.wants),
-      savings: Math.max(0, targets.savings - already.savings),
+      needs: Math.max(0, targets.needs - already.needs - reservedBy.needs),
+      wants: Math.max(0, targets.wants - already.wants - reservedBy.wants),
+      savings: Math.max(0, targets.savings - already.savings - reservedBy.savings),
     }
     const gapTotal = gap.needs + gap.wants + gap.savings
     split = splitByWeights(Math.min(free, gapTotal), gap)
@@ -230,26 +259,30 @@ export function suggestDistribution(
     split = { needs: 0, wants: 0, savings: income }
   }
 
-  return { income, reserves, split, goalSuggestions: suggestGoals(split.savings, data.goals, data.goalRemainingRub) }
+  return { income, reserves, split, goalSuggestions: suggestGoals(split.savings, data.goals, data.goalRemainingRub, data.goalMonthLeftRub) }
 }
 
-/** Раскладывает сумму сбережений по незакрытым целям в порядке приоритета. */
+/**
+ * Раскладывает сумму сбережений по целям: сначала целям со сроком — сколько им ещё нужно в этом месяце,
+ * затем остаток по всем незакрытым целям в порядке приоритета.
+ */
 export function suggestGoals(
   savings: number,
   goals: Goal[],
   remainingRub: Map<number, number>,
+  monthLeftRub: Map<number, number> = new Map(),
 ): { goal: Goal; rub: number }[] {
-  const res: { goal: Goal; rub: number }[] = []
+  const given = new Map<number, number>()
   let left = savings
-  for (const g of [...goals].sort((a, b) => a.priority - b.priority)) {
-    if (left <= 0) break
-    const need = remainingRub.get(g.id!) ?? 0
-    if (need <= 0) continue
-    const rub = Math.min(left, need)
-    res.push({ goal: g, rub })
-    left -= rub
+  const sorted = [...goals].sort((a, b) => a.priority - b.priority)
+  const give = (g: Goal, cap: number) => {
+    const room = (remainingRub.get(g.id!) ?? 0) - (given.get(g.id!) ?? 0)
+    const rub = Math.max(0, Math.min(left, cap, room))
+    if (rub > 0) { given.set(g.id!, (given.get(g.id!) ?? 0) + rub); left -= rub }
   }
-  return res
+  for (const g of sorted) if (g.deadline) give(g, monthLeftRub.get(g.id!) ?? 0)
+  for (const g of sorted) give(g, Infinity)
+  return sorted.filter(g => given.has(g.id!)).map(g => ({ goal: g, rub: given.get(g.id!)! }))
 }
 
 // ---------- Цели ----------
@@ -275,8 +308,9 @@ export function goalProgress(goals: Goal[], bal: Map<number, number>): GoalProgr
 
 /** Что сохраняется при принятии распределения: резервы входят в нужды. */
 export function allocationOf(d: Distribution, split = d.split): Record<Bucket, number> {
-  const reserved = d.reserves.reduce((s, r) => s + r.rub, 0)
-  return { needs: split.needs + reserved, wants: split.wants, savings: split.savings }
+  const res = { ...split }
+  for (const r of d.reserves) res[r.bucket] += r.rub
+  return res
 }
 
 // ---------- Главная, календарь, аналитика ----------
@@ -329,7 +363,7 @@ export function plannedInMonth(recurring: Recurring[], settings: Settings, month
   const events: PlannedEvent[] = [
     { date: day(settings.salaryDay), kind: 'salary', amount: settings.expectedSalary },
     { date: day(settings.advanceDay), kind: 'advance', amount: settings.expectedAdvance },
-    ...recurring.filter(r => r.active).map(r => ({ date: day(r.day), kind: 'payment' as const, recurring: r })),
+    ...recurring.filter(r => r.active && r.kind !== 'topup').map(r => ({ date: day(r.day), kind: 'payment' as const, recurring: r })),
   ]
   return events.sort((a, b) => a.date.localeCompare(b.date))
 }
@@ -403,7 +437,8 @@ export function monthForecast(
   const [y, m] = month.split('-').map(Number)
   const days = new Date(y, m, 0).getDate()
   const elapsed = Number(today.slice(8))
-  const active = data.recurring.filter(r => r.active)
+  // Пополнения копилок — не расход: расходом станут сами траты по категории.
+  const active = data.recurring.filter(r => r.active && r.kind !== 'topup')
   const fixedCats = new Set(active.map(r => r.categoryId))
 
   const totals = monthTotals(data.txs, month)
@@ -501,4 +536,80 @@ export function accountsForEntry(accounts: Account[], txs: Tx[], defaultId: numb
     Number(b.id === defaultId) - Number(a.id === defaultId) ||
     (use.get(b.id!) ?? 0) - (use.get(a.id!) ?? 0) ||
     a.order - b.order)
+}
+
+// ---------- Цели со сроком ----------
+
+/** Месяцев от текущего до срока включительно (минимум 1). */
+export function monthsUntil(month: string, deadline: string): number {
+  const [y1, m1] = month.split('-').map(Number)
+  const [y2, m2] = deadline.split('-').map(Number)
+  return Math.max(1, (y2 - y1) * 12 + (m2 - m1) + 1)
+}
+
+export interface GoalMonthPlan {
+  monthly: number // сколько нужно откладывать в месяц (в валюте счёта)
+  done: number // уже отложено в этом месяце
+  left: number // осталось отложить в этом месяце
+}
+
+/**
+ * План целей со сроком на месяц. Вклад месяца — чистые переводы на счёт цели в этом месяце,
+ * распределённые по целям со сроком на этом счёте в порядке приоритета.
+ */
+export function goalMonthPlans(goals: Goal[], progress: GoalProgress[], txs: Tx[], month: string): Map<number, GoalMonthPlan> {
+  const net = new Map<number, number>()
+  for (const t of txs) {
+    if (t.type !== 'transfer' || monthOf(t.date) !== month) continue
+    net.set(t.toAccountId!, (net.get(t.toAccountId!) ?? 0) + (t.toAmount ?? t.amount))
+    net.set(t.accountId, (net.get(t.accountId) ?? 0) - t.amount)
+  }
+  const pool = new Map([...net].map(([k, v]) => [k, Math.max(0, v)]))
+  const res = new Map<number, GoalMonthPlan>()
+  for (const g of [...goals].sort((a, b) => a.priority - b.priority)) {
+    if (!g.deadline) continue
+    const remaining = progress.find(p => p.goal.id === g.id)?.remaining ?? g.target
+    const avail = pool.get(g.accountId) ?? 0
+    // Сколько было до начала месяца: сегодняшний остаток + уже отложенное в этом месяце.
+    const startRemaining = remaining + Math.min(avail, g.target)
+    const monthly = Math.ceil(startRemaining / monthsUntil(month, g.deadline))
+    const done = Math.min(avail, monthly)
+    pool.set(g.accountId, avail - done)
+    res.set(g.id!, { monthly, done, left: Math.max(0, Math.min(monthly - done, remaining)) })
+  }
+  return res
+}
+
+// ---------- Счета: цвет ----------
+
+const COLOR_BY_NAME: [RegExp, AccountColor][] = [
+  [/тинькофф|т-банк|tinkoff/i, 'yellow'], [/сбер/i, 'green'], [/псб|втб/i, 'blue'], [/альфа/i, 'pink'], [/газпром|озон/i, 'sky'],
+]
+
+export function accountColor(a: Account, all: Account[]): AccountColor {
+  if (a.color) return a.color
+  const byName = COLOR_BY_NAME.find(([re]) => re.test(a.name))?.[1]
+  if (byName) return byName
+  const rest = ACCOUNT_COLORS.filter(c => c !== 'yellow' && c !== 'green')
+  const idx = all.filter(x => !COLOR_BY_NAME.some(([re]) => re.test(x.name))).findIndex(x => x.id === a.id)
+  return rest[Math.max(0, idx) % rest.length]
+}
+
+// ---------- Первая настройка ----------
+
+export type SetupStep = 'pay' | 'recurring' | 'goals' | 'categories' | 'security' | 'backup'
+
+export function setupSteps(
+  d: { settings: Settings; recurring: Recurring[]; goals: Goal[] },
+  lockEnabled: boolean,
+): { id: SetupStep; label: string; done: boolean }[] {
+  const active = d.recurring.filter(r => r.active)
+  return [
+    { id: 'pay', label: 'Ожидаемые зарплата и аванс', done: d.settings.expectedSalary > 0 && d.settings.expectedAdvance > 0 },
+    { id: 'recurring', label: 'Регулярные платежи с копилками', done: active.length > 0 && active.every(r => r.reserveAccountId != null) },
+    { id: 'goals', label: 'Цели на копилках', done: d.goals.length > 0 },
+    { id: 'categories', label: 'Проверить типы категорий', done: !!d.settings.categoriesReviewed },
+    { id: 'security', label: 'Face ID или PIN', done: lockEnabled },
+    { id: 'backup', label: 'Первый бэкап в Excel', done: d.settings.lastExportAt != null },
+  ]
 }

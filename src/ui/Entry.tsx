@@ -8,6 +8,7 @@ import { AmountInput, CUR_SUFFIX, fromInput, Segmented, toInput, useOnce } from 
 import { activeAccounts, childrenOf, rootCategories, type Data } from './data'
 import { categoryIcon, Icon, INCOME_ICON, type IconName } from './icons'
 import { applyKey, Keypad } from './Keypad'
+import { AccountDot } from './AccountBadge'
 
 const TYPES: { value: TxType; label: string }[] = [
   { value: 'expense', label: 'Расход' },
@@ -74,6 +75,15 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
     return out
   }, [data.txs])
 
+  /** Счёт, привязанный к категории (у подкатегории — свой или родителя). Только для новых операций. */
+  function pickCategory(root: number | null, sub: number | null) {
+    setRootId(root)
+    setSubId(sub)
+    if (tx) return
+    const own = data.categories.find(c => c.id === sub)?.accountId ?? data.categories.find(c => c.id === root)?.accountId
+    if (own != null && active.some(a => a.id === own)) setAccountId(own)
+  }
+
   function repeat(t: Tx) {
     const c = data.categories.find(x => x.id === t.categoryId)
     setRootId(c?.parentId ?? c?.id ?? null)
@@ -135,7 +145,7 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
     <div className="scroll-row">
       {list.filter(a => a.id !== exclude).map(a => (
         <button key={a.id} type="button" className={a.id === value ? 'chip on' : 'chip'} onClick={() => onPick(a.id!)}>
-          <Icon name="wallet" size={16} />{a.name}{a.currency !== 'RUB' ? ` ${CUR_SUFFIX[a.currency]}` : ''}
+          <AccountDot color={data.colorOf(a)} />{a.name}{a.currency !== 'RUB' ? ` ${CUR_SUFFIX[a.currency]}` : ''}
         </button>
       ))}
     </div>
@@ -176,13 +186,13 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
         <>
           <div className="tile-grid">
             {roots.map(c => (
-              tile(c.id!, categoryIcon(c), c.name, c.bucket, c.id === rootId, () => { setRootId(c.id!); setSubId(null) })
+              tile(c.id!, categoryIcon(c), c.name, c.bucket, c.id === rootId, () => pickCategory(c.id!, null))
             ))}
           </div>
           {subs.length > 0 && (
             <div className="scroll-row" style={{ marginTop: 10 }}>
               {subs.map(c => (
-                <button key={c.id} type="button" className={c.id === subId ? 'chip on' : 'chip'} onClick={() => setSubId(c.id === subId ? null : c.id!)}>{c.name}</button>
+                <button key={c.id} type="button" className={c.id === subId ? 'chip on' : 'chip'} onClick={() => pickCategory(rootId, c.id === subId ? null : c.id!)}>{c.name}</button>
               ))}
             </div>
           )}

@@ -1,7 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, getSettings } from '../db'
 import { convertToRub } from '../domain/rates'
-import { balances, goalProgress, rootOf } from '../domain/calc'
+import { accountColor, balances, goalMonthPlans, goalProgress, rootOf } from '../domain/calc'
+import { monthOf, todayISO } from '../domain/money'
 import type { Account, Bucket, Category, Currency, Rate, Tx } from '../domain/types'
 import { INCOME_LABEL } from '../domain/types'
 import { categoryIcon, INCOME_ICON, type IconName } from './icons'
@@ -9,7 +10,7 @@ import { categoryIcon, INCOME_ICON, type IconName } from './icons'
 /** Все данные приложения одним запросом; объёмы для личного учёта небольшие. */
 export function useData() {
   return useLiveQuery(async () => {
-    const [accounts, categories, txs, limits, recurring, goals, allocations, settings, rate] = await Promise.all([
+    const [accounts, categories, txs, limits, recurring, goals, allocations, settings, rate, lock] = await Promise.all([
       db.accounts.orderBy('order').toArray(),
       db.categories.toArray(),
       db.txs.orderBy('date').toArray(),
@@ -19,6 +20,7 @@ export function useData() {
       db.allocations.toArray(),
       getSettings(),
       db.rates.orderBy('date').last(),
+      db.lock.get('lock'),
     ])
     const bal = balances(accounts, txs)
     const progress = goalProgress(goals, bal)
@@ -26,7 +28,17 @@ export function useData() {
     const latestRate = rate ?? null
     const toRub = (amount: number, currency: Currency) => convertToRub(amount, currency, latestRate)
     const goalRemainingRub = new Map(progress.map(p => [p.goal.id!, toRub(p.remaining, accCurrency.get(p.goal.accountId) ?? 'RUB') ?? 0]))
-    return { accounts, categories, txs, limits, recurring, goals, allocations, settings, latestRate, bal, progress, toRub, goalRemainingRub }
+    const goalPlans = goalMonthPlans(goals, progress, txs, monthOf(todayISO()))
+    const goalMonthLeftRub = new Map([...goalPlans].map(([id, p]) => {
+      const g = goals.find(x => x.id === id)!
+      return [id, toRub(p.left, accCurrency.get(g.accountId) ?? 'RUB') ?? 0]
+    }))
+    const lockEnabled = lock?.pinHash != null
+    const colorOf = (a: Account) => accountColor(a, accounts)
+    return {
+      accounts, categories, txs, limits, recurring, goals, allocations, settings, latestRate, bal, progress, toRub,
+      goalRemainingRub, goalPlans, goalMonthLeftRub, lockEnabled, colorOf,
+    }
   })
 }
 

@@ -1,4 +1,6 @@
-import { bucketStates, monthAverage, monthForecast, monthTotals, netChangeSince, savingsRate, upcoming, type PlannedEvent } from '../domain/calc'
+import { bucketStates, monthAverage, monthForecast, monthTotals, netChangeSince, savingsRate, setupSteps, upcoming, type PlannedEvent, type SetupStep } from '../domain/calc'
+import { saveSettings } from '../db'
+import { AccountDot } from './AccountBadge'
 import { formatMoney, monthOf, todayISO } from '../domain/money'
 import { BUCKET_LABEL, BUCKETS, INCOME_LABEL, type Tx } from '../domain/types'
 import { Bar, Money, setAmountsHidden, useAmountsHidden } from './common'
@@ -13,7 +15,7 @@ function inDays(date: string, today: string) {
   return n === 0 ? 'сегодня' : n === 1 ? 'завтра' : `через ${n} дн.`
 }
 
-export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenBackup, onOpenTx, onOpenAccounts, onOpenAnalytics }: {
+export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenBackup, onOpenTx, onOpenAccounts, onOpenAnalytics, onOpenSetup }: {
   data: Data
   onDistribute: (t: Tx) => void
   onOpenBudget: () => void
@@ -22,18 +24,18 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
   onOpenTx: (t: Tx) => void
   onOpenAccounts: () => void
   onOpenAnalytics: (mode: 'income' | 'expense') => void
+  onOpenSetup: (step: SetupStep) => void
 }) {
   const hidden = useAmountsHidden()
   const today = todayISO()
   const month = monthOf(today)
   const accounts = activeAccounts(data.accounts)
   const total = accounts.reduce((s, a) => s + (data.toRub(data.bal.get(a.id!) ?? 0, a.currency) ?? 0), 0)
-  // Самые крупные счета по сумме в рублях; пустые не показываем.
-  const topAccounts = accounts
-    .map(a => ({ a, rub: data.toRub(data.bal.get(a.id!) ?? 0, a.currency) ?? 0 }))
-    .filter(x => x.rub !== 0)
-    .sort((x, y) => Math.abs(y.rub) - Math.abs(x.rub))
-    .slice(0, 4)
+  // Под балансом — счета с галочкой «на главной»; если не отмечен ни один — основной счёт.
+  const flagged = accounts.filter(a => a.showOnHome)
+  const homeAccounts = flagged.length ? flagged : accounts.filter(a => a.id === data.settings.defaultAccountId)
+  const steps = setupSteps(data, data.lockEnabled)
+  const stepsDone = steps.filter(x => x.done).length
   const since = new Date(); since.setDate(since.getDate() - 29)
   const delta = netChangeSince(data.txs, todayISO(since))
   const totals = monthTotals(data.txs, month)
@@ -42,7 +44,10 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
   const events = upcoming(data.recurring, data.settings, today, 31).slice(0, 5)
   const allocated = new Set(data.allocations.map(a => a.txId))
   const pending = data.txs.filter(t => t.type === 'income' && monthOf(t.date) === month && !allocated.has(t.id!))
-  const exportStale = data.txs.length > 0 && (!data.settings.lastExportAt || Date.now() - data.settings.lastExportAt > 7 * 864e5)
+  // Пока бэкапа не было, о нём напоминает карточка настройки; баннер — когда бэкап устарел (или карточку скрыли).
+  const exportStale = data.txs.length > 0 && (data.settings.lastExportAt
+    ? Date.now() - data.settings.lastExportAt > 7 * 864e5
+    : !!data.settings.setupDismissed)
   const forecast = monthForecast(data, data.settings, today, r => data.toRub(r.amount, r.currency) ?? r.amount)
   const rate = savingsRate({ income: forecast.income, expense: forecast.expense })
   const overspent = totals.expense - totals.income
@@ -87,17 +92,14 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
             {delta > 0 ? '↑' : '↓'} {formatMoney(Math.round(Math.abs(delta) / 100) * 100)} за 30 дней
           </div>
         )}
-        {topAccounts.length > 0 && (
+        {homeAccounts.length > 0 && (
           <button className="acc-mini" onClick={onOpenAccounts} aria-label="Открыть все счета">
-            {topAccounts.map(({ a }) => (
+            {homeAccounts.map(a => (
               <span className="line" key={a.id}>
-                <span className="n">{a.name}</span>
+                <span className="n" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><AccountDot color={data.colorOf(a)} />{a.name}</span>
                 <span className="num"><Money v={data.bal.get(a.id!) ?? 0} cur={a.currency} round /></span>
               </span>
             ))}
-            {accounts.length > topAccounts.length && (
-              <span className="line more"><span>ещё {accounts.length - topAccounts.length}</span><Icon name="right" size={16} /></span>
-            )}
           </button>
         )}
         <div className="tiles">
@@ -113,6 +115,23 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
           </button>
         </div>
       </div>
+
+      {!data.settings.setupDismissed && stepsDone < steps.length && (
+        <div className="card setup">
+          <div className="line" style={{ paddingTop: 0 }}>
+            <h3>Настрой приложение · {stepsDone} из {steps.length}</h3>
+            <button className="icon-btn" aria-label="Скрыть" onClick={() => saveSettings({ setupDismissed: true })}><Icon name="close" size={18} /></button>
+          </div>
+          <Bar value={stepsDone} max={steps.length} color="var(--accent)" />
+          {steps.map(st => (
+            <button key={st.id} className={`setup-step ${st.done ? 'done' : ''}`} disabled={st.done} onClick={() => onOpenSetup(st.id)}>
+              <span className="check-circle">{st.done && <Icon name="check" size={14} />}</span>
+              <span className="body">{st.label}</span>
+              {!st.done && <Icon name="right" size={16} />}
+            </button>
+          ))}
+        </div>
+      )}
 
       {(totals.income > 0 || totals.expense > 0) && (
         <div className={`card ${forecast.balance < 0 ? 'alert-card' : ''}`}>

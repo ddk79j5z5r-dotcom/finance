@@ -7,6 +7,7 @@ import { AmountInput, Chips, CUR_SUFFIX, fromInput, Money, Sheet, toInput, useOn
 import { childrenOf, rateHint, rootCategories, type Data } from './data'
 import { Icon, type IconName } from './icons'
 import { ImportCk } from './ImportCk'
+import { notify } from './undo'
 
 export type MoreSection = 'rule' | 'pay' | 'categories' | 'recurring' | 'security' | 'backup' | 'reminders' | 'coinkeeper'
 export type MorePage = 'calendar' | 'analytics' | 'accounts'
@@ -134,21 +135,30 @@ function PaySection({ data, onDone }: { data: Data; onDone: () => void }) {
 function CategoriesSection({ data }: { data: Data }) {
   const [edit, setEdit] = useState<Partial<Category> | null>(null)
   const roots = rootCategories(data.categories)
+  // Раздел открыли — пункт «Проверить типы категорий» считается выполненным.
+  useEffect(() => { if (!data.settings.categoriesReviewed) saveSettings({ categoriesReviewed: true }) }, [data.settings.categoriesReviewed])
+  const accName = (id?: number | null) => (id != null ? data.accounts.find(a => a.id === id)?.name : undefined)
   return (
     <>
       {edit ? <CategoryForm data={data} cat={edit} onDone={() => setEdit(null)} /> : (
         <>
-          {BUCKETS.map(b => (
+          <p className="hint">Тип решает, куда идёт трата в 50/30/20. У подкатегории может быть свой тип — например, «Aristo → Проект» как желание.</p>
+          {BUCKETS.filter(b => b !== 'savings').map(b => (
             <div key={b}>
               <div className="day">{BUCKET_LABEL[b]}</div>
               <div className="card tight">
                 {roots.filter(c => c.bucket === b).map(c => (
                   <div key={c.id}>
-                    <button className="row" onClick={() => setEdit(c)}><span>{c.name}</span><span className="muted">›</span></button>
+                    <button className="row" onClick={() => setEdit(c)}>
+                      <span>{c.name}{accName(c.accountId) && <span className="muted small"> · {accName(c.accountId)}</span>}</span><span className="muted">›</span>
+                    </button>
                     {childrenOf(data.categories, c.id!).map(s => (
-                      <button className="row" style={{ paddingLeft: 20 }} key={s.id} onClick={() => setEdit(s)}><span>{s.name}</span><span className="muted">›</span></button>
+                      <button className="row" style={{ paddingLeft: 20 }} key={s.id} onClick={() => setEdit(s)}>
+                        <span>{s.name}{s.bucket !== c.bucket && <span className={`pill small tone-${s.bucket}`} style={{ marginLeft: 8 }}>{BUCKET_LABEL[s.bucket].toLowerCase()}</span>}</span>
+                        <span className="muted">›</span>
+                      </button>
                     ))}
-                    <button className="link small" style={{ display: "block", padding: "4px 0 12px 20px" }} onClick={() => setEdit({ parentId: c.id!, bucket: c.bucket })}>+ подкатегория</button>
+                    <button className="link small" style={{ display: 'block', padding: '4px 0 12px 20px' }} onClick={() => setEdit({ parentId: c.id!, bucket: c.bucket })}>+ подкатегория</button>
                   </div>
                 ))}
               </div>
@@ -164,31 +174,38 @@ function CategoriesSection({ data }: { data: Data }) {
 function CategoryForm({ data, cat, onDone }: { data: Data; cat: Partial<Category>; onDone: () => void }) {
   const [name, setName] = useState(cat.name ?? '')
   const [bucket, setBucket] = useState<Bucket>(cat.bucket ?? 'wants')
+  const [accountId, setAccountId] = useState<number | null>(cat.accountId ?? null)
   const isSub = cat.parentId != null
+  const parent = isSub ? data.categories.find(c => c.id === cat.parentId) : undefined
   const save = useOnce(async () => {
     if (!name.trim()) return
     await db.transaction('rw', db.categories, async () => {
-      const id = await db.categories.put({ ...(cat as Category), name: name.trim(), bucket, parentId: cat.parentId ?? null, archived: cat.archived ?? false })
-      // тип подкатегорий всегда совпадает с родителем
-      if (!isSub) for (const c of childrenOf(data.categories, id!)) await db.categories.update(c.id!, { bucket })
+      const id = await db.categories.put({ ...(cat as Category), name: name.trim(), bucket, accountId, parentId: cat.parentId ?? null, archived: cat.archived ?? false })
+      // Подкатегории, у которых тип совпадал с родителем, меняются вместе с ним; свои типы сохраняются.
+      if (!isSub && cat.bucket && cat.bucket !== bucket) {
+        for (const c of childrenOf(data.categories, id!)) if (c.bucket === cat.bucket) await db.categories.update(c.id!, { bucket })
+      }
     })
     onDone()
   })
   const archive = useOnce(async () => {
-    if (!confirm('Скрыть категорию? Прошлые операции сохранятся.')) return
     await db.categories.update(cat.id!, { archived: true })
     onDone()
+    notify(`Категория «${cat.name}» скрыта`, () => db.categories.update(cat.id!, { archived: false }).then(() => {}))
   })
   return (
     <>
       <label className="field-label">Название</label>
-      <input value={name} onChange={e => setName(e.target.value)} autoFocus />
-      {!isSub && (
-        <>
-          <label className="field-label">Тип</label>
-          <Chips options={(['needs', 'wants'] as Bucket[]).map(b => ({ value: b, label: BUCKET_LABEL[b] }))} value={bucket} onChange={setBucket} />
-        </>
-      )}
+      <input value={name} onChange={e => setName(e.target.value)} autoFocus={!cat.id} />
+      <label className="field-label">Тип</label>
+      <Chips options={(['needs', 'wants'] as Bucket[]).map(b => ({ value: b, label: BUCKET_LABEL[b] }))} value={bucket} onChange={setBucket} />
+      {isSub && parent && bucket !== parent.bucket && <p className="hint">Траты в «{name || 'подкатегории'}» пойдут в «{BUCKET_LABEL[bucket]}», хотя конверт «{parent.name}» — «{BUCKET_LABEL[parent.bucket]}».</p>}
+      <label className="field-label">Счёт по умолчанию</label>
+      <select value={accountId ?? ''} onChange={e => setAccountId(e.target.value ? Number(e.target.value) : null)}>
+        <option value="">{isSub ? 'Как у родительской категории' : 'Основной счёт'}</option>
+        {data.accounts.filter(a => !a.archived).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+      </select>
+      <p className="hint">При выборе этой категории в новой трате счёт подставится сам — например, «Aristo» → счёт «Aristo».</p>
       <button className="save" onClick={save}>Сохранить</button>
       {cat.id && <button className="danger" onClick={archive}>Скрыть</button>}
       <button className="secondary" onClick={onDone}>Назад</button>
@@ -196,68 +213,130 @@ function CategoryForm({ data, cat, onDone }: { data: Data; cat: Partial<Category
   )
 }
 
+const fundLabel = (f: Recurring['fundFrom'], d: Data) =>
+  f === 'both' ? 'пополам из зарплаты и аванса' : f === 'salary' ? `из зарплаты ${d.settings.salaryDay}-го` : `из аванса ${d.settings.advanceDay}-го`
+
 function RecurringSection({ data }: { data: Data }) {
   const [edit, setEdit] = useState<Partial<Recurring> | null>(null)
   if (edit) return <RecurringForm data={data} r={edit} onDone={() => setEdit(null)} />
+  const payments = data.recurring.filter(r => r.kind !== 'topup').sort((a, b) => a.day - b.day)
+  const topups = data.recurring.filter(r => r.kind === 'topup')
+  const acc = (id?: number | null) => data.accounts.find(a => a.id === id)?.name
   return (
     <>
+      <div className="day">Платежи</div>
       <div className="card tight">
-        {[...data.recurring].sort((a, b) => a.day - b.day).map(r => (
+        {payments.map(r => (
           <button className="row" key={r.id} onClick={() => setEdit(r)}>
-            <span className={r.active ? '' : 'muted'}>{r.day}-го · {r.name}<div className="muted small">из {r.fundFrom === 'salary' ? 'зарплаты' : 'аванса'}</div></span>
+            <span className={r.active ? '' : 'muted'}>{r.day}-го · {r.name}<div className="muted small">{fundLabel(r.fundFrom, data)}{acc(r.reserveAccountId) ? ` → ${acc(r.reserveAccountId)}` : ''}</div></span>
             <Money v={r.amount} cur={r.currency} />
           </button>
         ))}
-        {data.recurring.length === 0 && <p className="hint">Например: аренда 1-го из зарплаты, кредит 29-го из аванса.</p>}
+        {payments.length === 0 && <p className="hint">Например: аренда 1-го из зарплаты, кредит 29-го из аванса.</p>}
       </div>
-      <button className="secondary" onClick={() => setEdit({ currency: 'RUB', fundFrom: 'salary', active: true })}>+ Платёж</button>
+      <button className="secondary" onClick={() => setEdit({ kind: 'payment', currency: 'RUB', fundFrom: 'salary', active: true })}>+ Платёж</button>
+
+      <div className="day">Пополнения копилок</div>
+      <div className="card tight">
+        {topups.map(r => (
+          <button className="row" key={r.id} onClick={() => setEdit(r)}>
+            <span className={r.active ? '' : 'muted'}>{acc(r.reserveAccountId) ?? r.name}<div className="muted small">{fundLabel(r.fundFrom, data)}</div></span>
+            <Money v={r.amount} cur={r.currency} />
+          </button>
+        ))}
+        {topups.length === 0 && <p className="hint">Например: Aristo — 15 000 ₽ в месяц, пополам из зарплаты и аванса.</p>}
+      </div>
+      <button className="secondary" onClick={() => setEdit({ kind: 'topup', currency: 'RUB', fundFrom: 'both', active: true, day: 1 })}>+ Пополнение копилки</button>
     </>
   )
 }
 
 function RecurringForm({ data, r, onDone }: { data: Data; r: Partial<Recurring>; onDone: () => void }) {
+  const isTopup = r.kind === 'topup'
   const [name, setName] = useState(r.name ?? '')
   const [amount, setAmount] = useState(toInput(r.amount))
   const [currency, setCurrency] = useState<Currency>(r.currency ?? 'RUB')
   const [day, setDay] = useState(String(r.day ?? 1))
   const [categoryId, setCategoryId] = useState<number | undefined>(r.categoryId)
-  const [fundFrom, setFundFrom] = useState(r.fundFrom ?? 'salary')
+  const [fundFrom, setFundFrom] = useState<Recurring['fundFrom']>(r.fundFrom ?? 'salary')
   const [active, setActive] = useState(r.active ?? true)
   const [reserveAccountId, setReserveAccountId] = useState<number | null>(r.reserveAccountId ?? null)
+  const [error, setError] = useState('')
   const cats = data.categories.filter(c => !c.archived && !c.system)
   const label = (c: Category) => (c.parentId != null ? `${data.categories.find(p => p.id === c.parentId)?.name} · ${c.name}` : c.name)
+  const accounts = data.accounts.filter(a => !a.archived && a.currency === currency)
 
   const save = useOnce(async () => {
     const a = fromInput(amount)
-    if (!name.trim() || !a || categoryId == null) return
-    await db.recurring.put({ ...(r as Recurring), name: name.trim(), amount: a, currency, day: Math.min(31, Math.max(1, Number(day) || 1)), categoryId, fundFrom, reserveAccountId, active })
+    if (!a) return setError('Введи сумму')
+    if (isTopup && reserveAccountId == null) return setError('Выбери копилку')
+    if (categoryId == null) return setError('Выбери категорию')
+    const title = name.trim() || (isTopup ? data.accounts.find(x => x.id === reserveAccountId)?.name ?? 'Пополнение' : '')
+    if (!title) return setError('Введи название')
+    await db.recurring.put({
+      ...(r as Recurring), kind: isTopup ? 'topup' : 'payment', name: title, amount: a, currency,
+      day: Math.min(31, Math.max(1, Number(day) || 1)), categoryId, fundFrom, reserveAccountId, active,
+    })
     onDone()
+  })
+  const remove = useOnce(async () => {
+    const snapshot = await db.recurring.get(r.id!)
+    await db.recurring.delete(r.id!)
+    onDone()
+    if (snapshot) notify(`«${snapshot.name}» удалено`, () => db.recurring.put(snapshot).then(() => {}))
   })
   return (
     <>
-      <label className="field-label">Название</label>
-      <input value={name} onChange={e => setName(e.target.value)} placeholder="Аренда" autoFocus={!r.id} />
-      <label className="field-label">Сумма</label>
+      {isTopup ? (
+        <>
+          <label className="field-label">Копилка</label>
+          <select value={reserveAccountId ?? ''} onChange={e => setReserveAccountId(e.target.value ? Number(e.target.value) : null)}>
+            <option value="" disabled>Выбери счёт</option>
+            {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+          <label className="field-label">Сумма в месяц</label>
+        </>
+      ) : (
+        <>
+          <label className="field-label">Название</label>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Аренда" autoFocus={!r.id} />
+          <label className="field-label">Сумма</label>
+        </>
+      )}
       <AmountInput value={amount} onChange={setAmount} suffix={CUR_SUFFIX[currency]} />
       <Chips options={CURRENCIES.map(c => ({ value: c, label: c }))} value={currency} onChange={setCurrency} />
-      <label className="field-label">Число месяца</label>
-      <input inputMode="numeric" value={day} onChange={e => setDay(e.target.value)} />
-      <label className="field-label">Категория</label>
+      {!isTopup && (
+        <>
+          <label className="field-label">Число месяца</label>
+          <input inputMode="numeric" value={day} onChange={e => setDay(e.target.value)} />
+        </>
+      )}
+      <label className="field-label">{isTopup ? 'На что тратятся деньги из копилки' : 'Категория'}</label>
       <select value={categoryId ?? ''} onChange={e => setCategoryId(Number(e.target.value))}>
         <option value="" disabled>Выбери</option>
         {cats.sort((a, b) => label(a).localeCompare(label(b))).map(c => <option key={c.id} value={c.id}>{label(c)}</option>)}
       </select>
-      <label className="field-label">Резервировать из</label>
-      <Chips options={[{ value: 'salary' as const, label: `Зарплаты (${data.settings.salaryDay}-го)` }, { value: 'advance' as const, label: `Аванса (${data.settings.advanceDay}-го)` }]} value={fundFrom} onChange={setFundFrom} />
-      <label className="field-label">Копилка для этого платежа</label>
-      <select value={reserveAccountId ?? ''} onChange={e => setReserveAccountId(e.target.value ? Number(e.target.value) : null)}>
-        <option value="">Нет — деньги остаются на основном счёте</option>
-        {data.accounts.filter(a => !a.archived && a.currency === currency).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-      </select>
-      <p className="hint">Например, «Квартира» для аренды. При распределении зарплаты приложение предложит перевести резерв на этот счёт, а «Оплатил» спишет платёж с него.</p>
-      <label className="check"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} /> Активен</label>
+      {isTopup && <p className="hint">По типу этой категории пополнение учитывается в 50/30/20 (нужды или желания).</p>}
+      <label className="field-label">{isTopup ? 'Откладывать из' : 'Резервировать из'}</label>
+      <Chips options={[
+        { value: 'salary' as const, label: `Зарплаты (${data.settings.salaryDay}-го)` },
+        { value: 'advance' as const, label: `Аванса (${data.settings.advanceDay}-го)` },
+        { value: 'both' as const, label: 'Пополам' },
+      ]} value={fundFrom} onChange={setFundFrom} />
+      {!isTopup && (
+        <>
+          <label className="field-label">Копилка для этого платежа</label>
+          <select value={reserveAccountId ?? ''} onChange={e => setReserveAccountId(e.target.value ? Number(e.target.value) : null)}>
+            <option value="">Нет — деньги остаются на основном счёте</option>
+            {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+          <p className="hint">Например, «Квартира» для аренды. При распределении зарплаты приложение предложит перевести резерв на этот счёт, а «Оплатил» спишет платёж с него.</p>
+        </>
+      )}
+      <label className="check"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} /> Активно</label>
+      {error && <p className="error">{error}</p>}
       <button className="save" onClick={save}>Сохранить</button>
-      {r.id && <button className="danger" onClick={async () => { if (confirm('Удалить платёж?')) { await db.recurring.delete(r.id!); onDone() } }}>Удалить</button>}
+      {r.id && <button className="danger" onClick={remove}>Удалить</button>}
       <button className="secondary" onClick={onDone}>Назад</button>
     </>
   )

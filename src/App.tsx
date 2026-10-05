@@ -10,11 +10,12 @@ import { Sheet } from './ui/common'
 import { useData } from './ui/data'
 import { Distribute } from './ui/Distribute'
 import { Entry } from './ui/Entry'
-import { History } from './ui/History'
+import { History, type OpsFilter } from './ui/History'
 import { Home } from './ui/Home'
 import { Icon, type IconName } from './ui/icons'
 import { LockScreen } from './ui/Lock'
 import { More, type MorePage, type MoreSection } from './ui/More'
+import { notify, runUndo, useNotice } from './ui/undo'
 
 type Tab = 'home' | 'history' | 'budget' | 'more'
 const TABS: { id: Tab | 'add'; label: string; icon: IconName }[] = [
@@ -36,7 +37,8 @@ export default function App() {
   const [editTx, setEditTx] = useState<Tx | null>(null)
   const [lock, setLock] = useState<LockRow | null>(null)
   const [locked, setLocked] = useState(true)
-  const [toast, setToast] = useState('')
+  const [opsFilter, setOpsFilter] = useState<OpsFilter>({})
+  const notice = useNotice()
   const [distribute, setDistribute] = useState<Tx | null>(null)
   const hiddenAt = useRef<number | null>(null)
 
@@ -63,10 +65,10 @@ export default function App() {
     setAdding(false)
     setEditTx(null)
     if (tx.type === 'income') setDistribute(tx)
-    setToast('Сохранено')
-    setTimeout(() => setToast(''), 1500)
+    notify('Сохранено')
   }
   const openMore = (p: MorePage | null, s: MoreSection | null = null) => { setTab('more'); setMorePage(p); setSection(s) }
+  const openOps = (f: OpsFilter) => { setOpsFilter(f); setTab('history') }
 
   return (
     <div className="app">
@@ -74,10 +76,11 @@ export default function App() {
         {tab === 'home' && (
           <Home data={data} onDistribute={setDistribute} onOpenBudget={() => setTab('budget')}
             onOpenCalendar={() => openMore('calendar')} onOpenBackup={() => openMore(null, 'backup')} onOpenTx={setEditTx} onOpenAccounts={() => openMore('accounts')}
-            onOpenAnalytics={m => { setAnalyticsMode(m); openMore('analytics') }} />
+            onOpenAnalytics={m => { setAnalyticsMode(m); openMore('analytics') }}
+            onOpenSetup={step => (step === 'goals' ? openMore('accounts') : openMore(null, step))} />
         )}
-        {tab === 'history' && <History data={data} />}
-        {tab === 'budget' && <Budget data={data} onDistribute={setDistribute} />}
+        {tab === 'history' && <History data={data} filter={opsFilter} setFilter={setOpsFilter} />}
+        {tab === 'budget' && <Budget data={data} onDistribute={setDistribute} onOpenOps={openOps} />}
         {tab === 'more' && morePage && (
           <div>
             <div className="page" style={{ paddingBottom: 0 }}>
@@ -85,15 +88,20 @@ export default function App() {
             </div>
             <div style={{ marginTop: -18 }}>
               {morePage === 'calendar' && <Calendar data={data} />}
-              {morePage === 'analytics' && <Analytics data={data} initialMode={analyticsMode} />}
-              {morePage === 'accounts' && <Accounts data={data} />}
+              {morePage === 'analytics' && <Analytics data={data} initialMode={analyticsMode} onOpenOps={openOps} />}
+              {morePage === 'accounts' && <Accounts data={data} onOpenOps={openOps} />}
             </div>
           </div>
         )}
         {tab === 'more' && !morePage && <More data={data} section={section} setSection={setSection} onOpenPage={p => { setAnalyticsMode('expense'); setMorePage(p) }} />}
       </main>
 
-      {toast && <div className="toast">✓ {toast}</div>}
+      {notice && (
+        <div className="toast" role="status" key={notice.id}>
+          {notice.undo ? notice.text : `✓ ${notice.text}`}
+          {notice.undo && <button className="toast-undo" onClick={runUndo}>Отменить</button>}
+        </div>
+      )}
       {adding && (
         <Sheet title="Новая операция" full onClose={() => setAdding(false)}>
           <Entry data={data} onSaved={onSaved} />
@@ -110,7 +118,7 @@ export default function App() {
         {TABS.map(t => t.id === 'add' ? (
           <button key="add" className="fab" aria-label="Добавить операцию" onClick={() => setAdding(true)}><Icon name="plus" size={28} stroke={2.4} /></button>
         ) : (
-          <button key={t.id} className={tab === t.id ? 'on' : ''} onClick={() => { setTab(t.id as Tab); if (t.id === 'more') setMorePage(null) }}>
+          <button key={t.id} className={tab === t.id ? 'on' : ''} onClick={() => { setTab(t.id as Tab); if (t.id === 'more') setMorePage(null); if (t.id === 'history') setOpsFilter({}) }}>
             <Icon name={t.icon} size={24} />
             {t.label}
           </button>

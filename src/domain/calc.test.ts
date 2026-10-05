@@ -254,7 +254,7 @@ describe('прогноз и копилки', () => {
   it('переводы по копилкам: резервы на счета платежей, сбережения на счета целей', () => {
     const d = {
       income: R(55000),
-      reserves: [{ recurring: rent, rub: R(30000) }, { recurring: { ...rent, id: 3, name: 'ЖКХ', reserveAccountId: 7 }, rub: R(5000) }],
+      reserves: [{ recurring: rent, rub: R(30000), bucket: 'needs' as const }, { recurring: { ...rent, id: 3, name: 'ЖКХ', reserveAccountId: 7 }, rub: R(5000), bucket: 'needs' as const }],
       split: { needs: R(5000), wants: R(10000), savings: R(5000) },
       goalSuggestions: [{ goal: { id: 1, name: 'Подушка', target: R(1), accountId: 9, priority: 0 }, rub: R(5000) }],
     }
@@ -312,4 +312,87 @@ describe('порядок счетов при вводе', () => {
     expect(accountsForEntry(accounts, txs, 5, '2026-10-04').map(a => a.name))
       .toEqual(['Тинькофф Банк', 'Наличка', 'Сбербанк', 'Квартира', 'Aristo', 'Подушка безопасности'])
   })
+})
+
+import { accountColor, bucketOf, goalMonthPlans, monthsUntil, plannedInMonth as planned2, setupSteps, spentByBucket } from './calc'
+
+describe('подкатегории со своим типом', () => {
+  const aristo: Category[] = [
+    { id: 30, name: 'Aristo', parentId: null, bucket: 'needs', archived: false },
+    { id: 31, name: 'Топливо', parentId: 30, bucket: 'needs', archived: false },
+    { id: 32, name: 'Проект', parentId: 30, bucket: 'wants', archived: false },
+  ]
+  it('трата в «Проект» идёт в желания, хотя конверт — Aristo (нужды)', () => {
+    const txs = [
+      tx({ date: '2026-10-02', categoryId: 31, amount: R(3000), rub: R(3000) }),
+      tx({ date: '2026-10-03', categoryId: 32, amount: R(20000), rub: R(20000) }),
+      tx({ date: '2026-10-04', categoryId: 30, amount: R(500), rub: R(500) }),
+    ]
+    expect(bucketOf(aristo, 32)).toBe('wants')
+    expect(spentByBucket(aristo, txs, '2026-10')).toEqual({ needs: R(3500), wants: R(20000), savings: 0 })
+    expect(envelopes(aristo, [], txs, '2026-10')[0].spent).toBe(R(23500))
+  })
+})
+
+describe('пополнение копилки пополам из зарплаты и аванса', () => {
+  const topup: Recurring = { id: 5, kind: 'topup', name: 'Aristo', amount: R(15000), currency: 'RUB', day: 1, categoryId: 32, fundFrom: 'both', reserveAccountId: 40, active: true }
+  const cats: Category[] = [{ id: 32, name: 'Проект', parentId: null, bucket: 'wants', archived: false }]
+  const settings = { ...DEFAULT_SETTINGS, expectedSalary: R(60000), expectedAdvance: R(40000) }
+
+  it('половина в каждую выплату, в тип своей категории, переводом на копилку', () => {
+    for (const kind of ['salary', 'advance'] as const) {
+      const income = tx({ type: 'income', incomeKind: kind, date: '2026-10-13', amount: R(50000), rub: R(50000) })
+      const d = suggestDistribution(income, { txs: [income], allocations: [], recurring: [topup], goals: [], categories: cats, goalRemainingRub: new Map() }, settings, r => r.amount)
+      expect(d.reserves).toEqual([{ recurring: topup, rub: R(7500), bucket: 'wants' }])
+      expect(allocationOf(d).wants).toBeGreaterThanOrEqual(R(7500))
+      expect(transfersFor(d, 1)).toEqual([{ accountId: 40, rub: R(7500), reasons: ['Aristo'] }])
+    }
+  })
+
+  it('пополнение не попадает в календарь платежей и в прогноз расходов', () => {
+    expect(planned2([topup], settings, '2026-10').filter(e => e.kind === 'payment')).toEqual([])
+    expect(monthForecast({ txs: [], recurring: [topup] }, settings, '2026-10-10').fixedLeft).toBe(0)
+  })
+})
+
+describe('цели со сроком', () => {
+  const car: Goal = { id: 1, name: 'Машина', target: R(120000), accountId: 9, priority: 1, deadline: '2026-12' }
+  const pillow: Goal = { id: 2, name: 'Подушка', target: R(300000), accountId: 8, priority: 0 }
+
+  it('месяцев до срока', () => {
+    expect(monthsUntil('2026-10', '2026-12')).toBe(3)
+    expect(monthsUntil('2026-10', '2026-09')).toBe(1)
+  })
+
+  it('в месяц нужно (остаток на начало месяца) / месяцев; уже отложенное вычитается', () => {
+    const progress = [{ goal: car, saved: R(30000), remaining: R(90000) }]
+    const txs = [tx({ type: 'transfer', date: '2026-10-14', accountId: 1, amount: R(10000), rub: R(10000), toAccountId: 9, toAmount: R(10000), toRub: R(10000) })]
+    // на начало октября оставалось 100 000 → по 33 334 в месяц, 10 000 уже отложено
+    expect(goalMonthPlans([car], progress, txs, '2026-10').get(1)).toEqual({ monthly: 3333334, done: R(10000), left: 3333334 - R(10000) })
+  })
+
+  it('сбережения сначала закрывают месячный план целей со сроком, потом по приоритету', () => {
+    const remaining = new Map([[1, R(90000)], [2, R(300000)]])
+    const monthLeft = new Map([[1, R(20000)]])
+    expect(suggestGoals(R(30000), [car, pillow], remaining, monthLeft).map(s => [s.goal.name, s.rub]))
+      .toEqual([['Подушка', R(10000)], ['Машина', R(20000)]])
+  })
+})
+
+describe('цвета счетов и первая настройка', () => {
+  const a = (id: number, name: string, color?: 'pink'): Account => ({ id, name, currency: 'RUB', openingBalance: 0, archived: false, order: id, color })
+  it('банкам — по названию, остальным — по порядку, явный цвет важнее', () => {
+    const all = [a(1, 'Тинькофф Банк'), a(2, 'Сбербанк'), a(3, 'Квартира'), a(4, 'Подушка'), a(5, 'Дом', 'pink')]
+    expect(all.map(x => accountColor(x, all))).toEqual(['yellow', 'green', 'blue', 'sky', 'pink'])
+  })
+  it('пункты настройки отмечаются по данным', () => {
+    const steps = setupSteps({ settings: { ...DEFAULT_SETTINGS, expectedSalary: 1, expectedAdvance: 1, lastExportAt: 5 }, recurring: [], goals: [] }, true)
+    expect(steps.filter(s => s.done).map(s => s.id)).toEqual(['pay', 'security', 'backup'])
+  })
+})
+
+import { plural } from './money'
+it('склонение', () => {
+  const f: [string, string, string] = ['операция', 'операции', 'операций']
+  expect([1, 2, 5, 11, 21, 22, 112].map(n => plural(n, f))).toEqual(['операция', 'операции', 'операций', 'операций', 'операция', 'операции', 'операций'])
 })

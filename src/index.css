@@ -151,7 +151,7 @@ h3 { font-size: 17px; margin: 0; font-weight: 650; }
 
 /* ---------- Сегменты, чипы, поля ---------- */
 .segmented { display: flex; background: var(--card-2); border-radius: 12px; padding: 3px; margin-bottom: 12px; }
-.segmented button { flex: 1; text-align: center; padding: 10px 4px; border-radius: 9px; font-size: 15px; color: var(--muted); font-weight: 550; }
+.segmented button { flex: 1; min-width: 0; text-align: center; padding: 10px 2px; border-radius: 9px; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-weight: 550; }
 .segmented button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
 .segmented.small button { padding: 6px 4px; font-size: 13px; }
 .segmented.type button.on.expense { background: var(--neg); color: var(--on-neg); }
@@ -313,3 +313,30 @@ h3 { font-size: 17px; margin: 0; font-weight: 650; }
 .big-tile .badge { width: 44px; height: 44px; background: var(--accent-soft); color: var(--accent); margin-bottom: 6px; }
 .big-tile strong { font-size: 16px; }
 .big-tile .small { font-size: 13px; }
+
+/* ---------- Цвета счетов ---------- */
+.acc-badge { flex: none; display: grid; place-items: center; border-radius: 50%; font-weight: 750; color: #fff; }
+.acc-dot { flex: none; display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+.acc-yellow { background: #f2c230; color: #2a2100; }
+.acc-green { background: #21a038; }
+.acc-blue { background: #2f6fed; }
+.acc-sky { background: #2f9fd6; }
+.acc-orange { background: #ec7428; }
+.acc-pink { background: #df4a7c; }
+.acc-violet { background: #8b5cf6; }
+.acc-gray { background: #6b7380; }
+.color-picker { display: flex; flex-wrap: wrap; gap: 10px; }
+.color-picker button { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; }
+.color-picker button.on { outline: 3px solid var(--text); outline-offset: 2px; }
+.row-main { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; text-align: left; }
+.toast { display: flex; align-items: center; gap: 14px; max-width: calc(100% - 32px); }
+.toast-undo { color: var(--accent); font-weight: 700; font-size: 15px; padding: 2px 0; }
+@media (prefers-color-scheme: light) { .toast-undo { color: #7ee3a8; } }
+.setup .bar { margin-bottom: 6px; }
+.setup-step { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 0; min-height: 44px; font-size: 16px; }
+.setup-step + .setup-step { border-top: 1px solid var(--line); }
+.setup-step .body { flex: 1; }
+.setup-step.done { color: var(--muted); }
+.setup-step.done .body { text-decoration: line-through; }
+.check-circle { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; flex: none; }
+.setup-step.done .check-circle { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
