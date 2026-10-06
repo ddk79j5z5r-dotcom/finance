@@ -8,15 +8,15 @@
   --text: #111418;
   --text-2: #3c434d;
   --muted: #677080;
-  --accent: #0f8a52;
+  --accent: #1f6fd1;
   --on-accent: #ffffff;
-  --accent-soft: #dcf2e6;
+  --accent-soft: #dde9fb;
   --pos: #0f8a52;
   --neg: #d6453a;
   --on-neg: #ffffff;
   --neutral-strong: #4b5360;
   --warn: #a8640a;
-  --save: #0f8a52;
+  --save: #1f6fd1;
   --on-save: #ffffff;
   --sheet: #f4f5f7;
   --needs: #2a78d6;
@@ -32,7 +32,7 @@
   --glass-hi: rgba(255, 255, 255, 0.9);
   --glass-shadow: 0 10px 30px rgba(30, 60, 50, 0.08);
   --coupon: #6d4fe0;
-  --blob-1: rgba(47, 191, 113, 0.22);
+  --blob-1: rgba(59, 130, 246, 0.22);
   --blob-2: rgba(56, 189, 248, 0.16);
   --blob-3: rgba(167, 139, 250, 0.12);
 }
@@ -46,16 +46,16 @@
     --text: #f1f3f5;
     --text-2: #c5cad1;
     --muted: #8c949e;
-    --accent: #2fbf71;
-    --on-accent: #062a16;
-    --accent-soft: #173527;
+    --accent: #3a86e8;
+    --on-accent: #ffffff;
+    --accent-soft: #172a45;
     --pos: #3fd284;
     --neg: #ff6b5e;
     --on-neg: #2b0a06;
     --neutral-strong: #c5cad1;
     --warn: #f0a33a;
-    --save: #2fbf71;
-    --on-save: #062a16;
+    --save: #3a86e8;
+    --on-save: #ffffff;
     --sheet: #131518;
     --needs: #3987e5;
     --wants: #d95926;
@@ -70,8 +70,8 @@
     --glass-hi: rgba(255, 255, 255, 0.07);
     --glass-shadow: 0 12px 34px rgba(0, 0, 0, 0.35);
     --coupon: #a78bfa;
-    --blob-1: rgba(47, 191, 113, 0.30);
-    --blob-2: rgba(45, 140, 200, 0.22);
+    --blob-1: rgba(59, 130, 246, 0.30);
+    --blob-2: rgba(56, 189, 248, 0.18);
     --blob-3: rgba(139, 92, 246, 0.16);
   }
 }
@@ -349,7 +349,7 @@ h3 { font-size: 17px; margin: 0; font-weight: 650; }
 .row-main { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; text-align: left; }
 .toast { display: flex; align-items: center; gap: 14px; max-width: calc(100% - 32px); }
 .toast-undo { color: var(--accent); font-weight: 700; font-size: 15px; padding: 2px 0; }
-@media (prefers-color-scheme: light) { .toast-undo { color: #7ee3a8; } }
+@media (prefers-color-scheme: light) { .toast-undo { color: #9cc4ff; } }
 .setup .bar { margin-bottom: 6px; }
 .setup-step { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 0; min-height: 44px; font-size: 16px; }
 .setup-step + .setup-step { border-top: 1px solid var(--line); }
@@ -599,8 +599,7 @@ h3 { font-weight: 600; }
 .donut-center { font-size: 13px; }
 
 /* ---------- Выделение — синим ---------- */
-:root { --sel: #2a78d6; --on-sel: #ffffff; }
-@media (prefers-color-scheme: dark) { :root { --sel: #3987e5; } }
+:root { --sel: var(--accent); --on-sel: var(--on-accent); }
 .chip.on { background: var(--sel); color: var(--on-sel); }
 .cal button.sel { background: var(--sel); color: var(--on-sel); }
 .icon-btn.on { background: color-mix(in srgb, var(--sel) 18%, transparent); color: var(--sel); }
