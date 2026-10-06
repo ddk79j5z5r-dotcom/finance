@@ -77,20 +77,21 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
       </div>
 
       <div className="card">
-        <div className="line" style={{ paddingTop: 0 }}>
+        <div className="rule-head">
           <h3>Рекомендация {data.settings.rule.needs}/{data.settings.rule.wants}/{data.settings.rule.savings}</h3>
-          <span className="muted small">от дохода <Money v={income} /></span>
+          <div className="muted small sub">от дохода <Money v={income} /></div>
         </div>
         {noExpected && <p className="hint">Укажи ожидаемые зарплату и аванс в «Ещё → Выплаты», чтобы план был виден с начала месяца.</p>}
         {BUCKETS.map(b => {
           const s = buckets[b]
           return (
-            <div key={b} style={{ marginTop: 10 }}>
-              <div className="line small" style={{ padding: 0 }}>
+            <div key={b} className="rule-row">
+              <div className="line small">
                 <span><strong>{ROLE_TITLE[b]}</strong> <span className="muted">{data.settings.rule[b]}%</span></span>
-                <span className="num"><Money v={s.spent} /> <span className="muted">/ рек. <Money v={s.target} /></span></span>
+                <strong className="num"><Money v={s.spent} /></strong>
               </div>
               <Bar value={Math.max(0, s.spent)} max={s.target} color={`var(--${b})`} />
+              <div className="rec muted num">рекомендуется <Money v={s.target} /></div>
             </div>
           )
         })}
@@ -99,7 +100,7 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
         </p>
       </div>
 
-      <div className="section-title"><h3>Категории</h3><span className="muted small">нажми — лимит, <Icon name="list" size={13} /> — операции</span></div>
+      <div className="section-title stack"><h3>Категории</h3><span className="muted small">нажми — лимит, <Icon name="list" size={13} /> — операции</span></div>
       <div className="card tight">
         {sorted.map(e => {
           const cap = e.limit
