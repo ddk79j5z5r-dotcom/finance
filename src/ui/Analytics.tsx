@@ -61,7 +61,7 @@ export function Analytics({ data, initialMode = 'expense', onOpenOps }: { data: 
           <div className="donut-wrap">
             <Donut slices={slices} total={total} active={active} onSelect={k => setActive(a => (a === k ? null : k))}>
               <text x="80" y="76" textAnchor="middle" className="donut-center" fill="var(--text)">
-                {hidden ? '••••' : compact(focus?.rub ?? total)}
+                {hidden ? '••••' : formatMoney(focus?.rub ?? total)}
               </text>
               <text x="80" y="96" textAnchor="middle" fontSize="11" fill="var(--muted)">
                 {focus ? focus.label.slice(0, 18) : period === 'month' ? 'за месяц' : 'за период'}
@@ -90,7 +90,7 @@ export function Analytics({ data, initialMode = 'expense', onOpenOps }: { data: 
             })}>
               <span style={{ width: 10, height: 10, borderRadius: 3, background: s.color, flex: 'none' }} />
               <div className="body title">{s.label}</div>
-              <div className="amt"><Money v={s.rub} round /><div className="sub">{Math.round((s.rub / total) * 100)}%</div></div>
+              <div className="amt"><Money v={s.rub} /><div className="sub">{Math.round((s.rub / total) * 100)}%</div></div>
             </button>
           ))}
         </div>
@@ -109,7 +109,7 @@ export function Analytics({ data, initialMode = 'expense', onOpenOps }: { data: 
         {!hidden && sel && (
           <div className="line small">
             <span className="muted">{monthLabel(month)}</span>
-            <span className="num">+{compact(sel.income)} · −{compact(sel.expense)} = <strong className={sel.income - sel.expense < 0 ? 'neg' : 'pos'}>{sel.income - sel.expense < 0 ? '−' : '+'}{compact(Math.abs(sel.income - sel.expense))}</strong></span>
+            <span className="num">+{formatMoney(sel.income)} · −{formatMoney(sel.expense)} = <strong className={sel.income - sel.expense < 0 ? 'neg' : 'pos'}>{sel.income - sel.expense < 0 ? '−' : '+'}{formatMoney(Math.abs(sel.income - sel.expense))}</strong></span>
           </div>
         )}
       </div>
@@ -117,7 +117,7 @@ export function Analytics({ data, initialMode = 'expense', onOpenOps }: { data: 
       <div className="card bars">
         <div className="line" style={{ paddingTop: 0 }}>
           <h3>Капитал</h3>
-          {!hidden && <span className="num"><Money v={capital.at(-1) ?? 0} round /></span>}
+          {!hidden && <span className="num"><Money v={capital.at(-1) ?? 0} /></span>}
         </div>
         <p className="muted small" style={{ margin: '0 0 6px' }}>сумма на всех счетах на конец месяца</p>
         <LineChart months={pairMonths} values={capital} selected={month} onSelect={setMonth} hidden={hidden} />
@@ -164,7 +164,7 @@ function compact(minor: number) {
   const rub = minor / 100
   if (rub >= 1_000_000) return `${(rub / 1_000_000).toFixed(1).replace('.', ',')} млн ₽`
   if (rub >= 10_000) return `${Math.round(rub / 1000)} тыс ₽`
-  return formatMoney(Math.round(minor / 100) * 100)
+  return formatMoney(minor)
 }
 
 function PairBars({ bars, selected, onSelect, hidden }: {

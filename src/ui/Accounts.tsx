@@ -32,7 +32,7 @@ export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFi
       <div className="page-head"><h1>Счета и цели</h1></div>
       <div className="card hero">
         <div className="label"><span>Всего в рублях</span></div>
-        <div className="big"><Money v={totalRub} round /></div>
+        <div className="big"><Money v={totalRub} /></div>
         <div className="muted small">{rateHint(data.latestRate)}</div>
       </div>
 
@@ -53,13 +53,13 @@ export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFi
                     </div>
                     <div className={`amt ${b < 0 ? 'neg' : ''}`}>
                       <Money v={b} cur={a.currency} />
-                      {a.currency !== 'RUB' && <div className="sub">≈ <Money v={data.toRub(b, a.currency) ?? 0} round /></div>}
+                      {a.currency !== 'RUB' && <div className="sub">≈ <Money v={data.toRub(b, a.currency) ?? 0} /></div>}
                     </div>
                   </button>
                 </div>
                 {(data.bondValue.get(a.id!) ?? 0) > 0 && (
                   <div className="muted small" style={{ margin: '-4px 0 4px 52px' }}>
-                    деньги <Money v={data.bal.get(a.id!) ?? 0} round /> · облигации <Money v={data.bondValue.get(a.id!) ?? 0} round />
+                    деньги <Money v={data.bal.get(a.id!) ?? 0} /> · облигации <Money v={data.bondValue.get(a.id!) ?? 0} />
                   </div>
                 )}
                 <BondList data={data} accountId={a.id!} onOpen={setPosition} />
@@ -69,13 +69,13 @@ export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFi
                     <button key={p.goal.id} onClick={() => setEditAcc(a)} style={{ display: 'block', width: '100%', padding: '8px 0' }}>
                       <div className="line small" style={{ padding: 0 }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="target" size={16} /> {goals.length > 1 ? p.goal.name : 'Цель'}</span>
-                        <span className="num"><Money v={p.saved} cur={a.currency} round /> <span className="muted">из <Money v={p.goal.target} cur={a.currency} round /></span></span>
+                        <span className="num"><Money v={p.saved} cur={a.currency} /> <span className="muted">из <Money v={p.goal.target} cur={a.currency} /></span></span>
                       </div>
                       <Bar value={p.saved} max={p.goal.target} color="var(--savings)" />
                       {p.goal.deadline && plan && p.remaining > 0 && (
                         <div className="muted small">
-                          к концу {monthGenitive(p.goal.deadline)}: по <Money v={plan.monthly} cur={a.currency} round />/мес
-                          {plan.left > 0 ? <> · в этом месяце ещё <Money v={plan.left} cur={a.currency} round /></> : <> · <span className="pos">месяц закрыт</span></>}
+                          к концу {monthGenitive(p.goal.deadline)}: по <Money v={plan.monthly} cur={a.currency} />/мес
+                          {plan.left > 0 ? <> · в этом месяце ещё <Money v={plan.left} cur={a.currency} /></> : <> · <span className="pos">месяц закрыт</span></>}
                         </div>
                       )}
                       {p.remaining <= 0 && <div className="pos small">собрано ✓</div>}
@@ -207,7 +207,7 @@ function AccountSheet({ data, acc, onClose, onOpenOps }: { data: Data; acc: Part
             const saved = acc.id != null ? data.value.get(acc.id) ?? 0 : 0
             if (!deadline) return <p className="hint">Без срока цель пополняется по остатку из сбережений.</p>
             const per = Math.ceil(Math.max(0, t - saved) / monthsUntil(thisMonth, deadline))
-            return <p className="hint">Откладывать ≈ <strong>{formatMoney(Math.round(per / 100) * 100, currency)}</strong> в месяц до конца {monthGenitive(deadline)}.</p>
+            return <p className="hint">Откладывать ≈ <strong>{formatMoney(per, currency)}</strong> в месяц до конца {monthGenitive(deadline)}.</p>
           })()}
         </>
       )}

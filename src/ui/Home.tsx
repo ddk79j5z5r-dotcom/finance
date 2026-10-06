@@ -65,14 +65,14 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
 
       <div className="air-balance glass">
         <span className="k">Общий баланс</span>
-        <span className="big"><Money v={total} round /></span>
+        <span className="big"><Money v={total} /></span>
         {!hidden && delta !== 0 && (
-          <span className={`delta ${delta > 0 ? 'pos' : 'neg'}`}>{delta > 0 ? '↑' : '↓'} {formatMoney(Math.round(Math.abs(delta) / 100) * 100)} за 30 дней</span>
+          <span className={`delta ${delta > 0 ? 'pos' : 'neg'}`}>{delta > 0 ? '↑' : '↓'} {formatMoney(Math.abs(delta))} за 30 дней</span>
         )}
         {homeAccounts.map(a => (
           <span className="air-acc" key={a.id}>
             <AccountDot color={data.colorOf(a)} /><span className="n">{a.name}</span>
-            <span className="num"><Money v={data.value.get(a.id!) ?? 0} cur={a.currency} round /></span>
+            <span className="num"><Money v={data.value.get(a.id!) ?? 0} cur={a.currency} /></span>
           </span>
         ))}
         <button className="pill-btn" onClick={onOpenAccounts}>Все счета <Icon name="right" size={14} /></button>
@@ -82,12 +82,12 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
         <div className="air-notices glass">
           {pending.map(t => (
             <button className="air-notice" key={t.id} onClick={() => onDistribute(t)}>
-              <span>Пришло: {INCOME_LABEL[t.incomeKind!].toLowerCase()} <Money v={t.rub} round /> — рекомендация</span><Icon name="right" size={16} />
+              <span>Пришло: {INCOME_LABEL[t.incomeKind!].toLowerCase()} <Money v={t.rub} /> — рекомендация</span><Icon name="right" size={16} />
             </button>
           ))}
           {data.pendingBond.slice(0, 3).map(ev => (
             <button className="air-notice coupon" key={ev.key} onClick={() => setBondEvent(ev)}>
-              <span>{ev.kind === 'coupon' ? 'Купон' : 'Погашение'} {ev.shortName}{ev.amount != null && <> — <Money v={ev.amount} round /></>} — записать</span><Icon name="right" size={16} />
+              <span>{ev.kind === 'coupon' ? 'Купон' : 'Погашение'} {ev.shortName}{ev.amount != null && <> — <Money v={ev.amount} /></>} — записать</span><Icon name="right" size={16} />
             </button>
           ))}
           {exportStale && (
@@ -104,22 +104,22 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
       <div className="air-section glass">
         <div className="air-stats">
           <button onClick={() => onOpenAnalytics('income')}>
-            <span className="k">Доходы</span><span className="v pos"><Money v={totals.income} round /></span>
+            <span className="k">Доходы</span><span className="v pos"><Money v={totals.income} /></span>
           </button>
           <button onClick={() => onOpenAnalytics('expense')}>
-            <span className="k">Расходы</span><span className="v neg"><Money v={totals.expense} round /></span>
+            <span className="k">Расходы</span><span className="v neg"><Money v={totals.expense} /></span>
           </button>
         </div>
         {(totals.income > 0 || totals.expense > 0) && (
           <button className={`air-forecast ${forecast.balance < 0 ? 'bad' : ''}`} onClick={onOpenBudget}>
             <span>
               {forecast.balance < 0 ? 'Месяц уходит в минус' : 'К концу месяца останется'}{' '}
-              <strong className={forecast.balance < 0 ? 'neg' : ''}>≈ <Money v={forecast.balance} round /></strong>
+              <strong className={forecast.balance < 0 ? 'neg' : ''}>≈ <Money v={forecast.balance} /></strong>
             </span>
             <span className="rule-line">
-              <span><i className="tone-dot-inline tone-needs" />Нужды <Money v={buckets.needs.spent} round /> / <Money v={buckets.needs.target} round /></span>
-              <span><i className="tone-dot-inline tone-wants" />Желания <Money v={buckets.wants.spent} round /> / <Money v={buckets.wants.target} round /></span>
-              <span><i className="tone-dot-inline tone-savings" />Сбережения <Money v={buckets.savings.spent} round /> / <Money v={buckets.savings.target} round /></span>
+              <span><i className="tone-dot-inline tone-needs" />Нужды <Money v={buckets.needs.spent} /> / <Money v={buckets.needs.target} /></span>
+              <span><i className="tone-dot-inline tone-wants" />Желания <Money v={buckets.wants.spent} /> / <Money v={buckets.wants.target} /></span>
+              <span><i className="tone-dot-inline tone-savings" />Сбережения <Money v={buckets.savings.spent} /> / <Money v={buckets.savings.target} /></span>
             </span>
           </button>
         )}
@@ -150,7 +150,7 @@ export function BondEventRow({ e, today, thin }: { e: BondEvent; today: string; 
         <div className="title">{e.kind === 'coupon' ? 'Купон' : 'Погашение'} {e.shortName}</div>
         <div className="sub">{[shortDate(e.date), inDays(e.date, today), `${e.qty} шт.`].filter(Boolean).join(' · ')}</div>
       </div>
-      <div className="amt coupon">{e.amount != null ? <>{e.estimated ? '≈ ' : ''}+<Money v={e.amount} round /></> : <span className="muted small">не объявлен</span>}</div>
+      <div className="amt coupon">{e.amount != null ? <>{e.estimated ? '≈ ' : ''}+<Money v={e.amount} /></> : <span className="muted small">не объявлен</span>}</div>
     </div>
   )
 }

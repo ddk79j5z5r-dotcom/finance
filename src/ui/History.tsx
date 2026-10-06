@@ -134,8 +134,8 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
             <>
               <Bar value={env.spent} max={env.limit} color={`var(--${cat!.bucket})`} />
               <div className="muted small">
-                потрачено <Money v={env.spent} round /> из <Money v={env.limit} round /> ·{' '}
-                <span className={env.available < 0 ? 'neg' : ''}>{env.available < 0 ? 'перерасход' : 'осталось'} <Money v={Math.abs(env.available)} round /></span>
+                потрачено <Money v={env.spent} /> из <Money v={env.limit} /> ·{' '}
+                <span className={env.available < 0 ? 'neg' : ''}>{env.available < 0 ? 'перерасход' : 'осталось'} <Money v={Math.abs(env.available)} /></span>
               </div>
             </>
           ) : <div className="muted small">лимит не задан</div>}
@@ -144,7 +144,7 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
 
       {active && all.length > 0 && (
         <div className="muted small" style={{ margin: '0 4px 4px' }}>
-          {all.length} {plural(all.length, ['операция', 'операции', 'операций'])}{totals.out > 0 && <> · расход <Money v={totals.out} round /></>}{totals.in > 0 && <> · приход <Money v={totals.in} round /></>}
+          {all.length} {plural(all.length, ['операция', 'операции', 'операций'])}{totals.out > 0 && <> · расход <Money v={totals.out} /></>}{totals.in > 0 && <> · приход <Money v={totals.in} /></>}
         </div>
       )}
 

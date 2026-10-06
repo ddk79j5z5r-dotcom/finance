@@ -23,8 +23,8 @@ export function BondList({ data, accountId, onOpen }: { data: Data; accountId: n
             <span className="sub">{p.qty} шт.{p.bond?.price != null ? ` · ${p.bond.price.toFixed(2).replace('.', ',')}%` : ''}</span>
           </span>
           <span className="amt">
-            <Money v={p.value} round />
-            <span className={`sub ${p.profit >= 0 ? 'pos' : 'neg'}`}>{p.profit >= 0 ? '+' : '−'}{formatMoney(Math.round(Math.abs(p.profit) / 100) * 100)}</span>
+            <Money v={p.value} />
+            <span className={`sub ${p.profit >= 0 ? 'pos' : 'neg'}`}>{p.profit >= 0 ? '+' : '−'}{formatMoney(Math.abs(p.profit))}</span>
           </span>
         </button>
       ))}
@@ -174,13 +174,13 @@ export function PositionSheet({ data, position, onClose }: { data: Data; positio
   return (
     <Sheet title={bond?.shortName ?? p.secid} onClose={onClose}>
       <div className="card">
-        <div className="line"><span>Стоимость</span><strong className="num"><Money v={p.value} round /></strong></div>
-        <div className="line small"><span className="muted">Вложено</span><span className="num"><Money v={p.invested} round /></span></div>
-        <div className="line small"><span className="muted">Купоны получено</span><span className="num"><Money v={p.coupons} round /></span></div>
+        <div className="line"><span>Стоимость</span><strong className="num"><Money v={p.value} /></strong></div>
+        <div className="line small"><span className="muted">Вложено</span><span className="num"><Money v={p.invested} /></span></div>
+        <div className="line small"><span className="muted">Купоны получено</span><span className="num"><Money v={p.coupons} /></span></div>
         <div className="line">
           <span>Доход</span>
           <strong className={`num ${p.profit >= 0 ? 'pos' : 'neg'}`}>
-            {p.profit >= 0 ? '+' : '−'}<Money v={Math.abs(p.profit)} round />{p.invested > 0 && <span className="small"> ({pct(p.profit / p.invested)})</span>}
+            {p.profit >= 0 ? '+' : '−'}<Money v={Math.abs(p.profit)} />{p.invested > 0 && <span className="small"> ({pct(p.profit / p.invested)})</span>}
           </strong>
         </div>
       </div>
@@ -190,7 +190,7 @@ export function PositionSheet({ data, position, onClose }: { data: Data; positio
           <div className="line small"><span className="muted">Цена</span><span>{bond.price != null ? `${bond.price.toFixed(2).replace('.', ',')}%` : '—'} от {formatMoney(bond.face)}</span></div>
           <div className="line small"><span className="muted">НКД за 1 шт.</span><span><Money v={bond.accrued} /></span></div>
           {next && perNext != null && (
-            <div className="line small"><span className="muted">Следующий купон</span><span>{dmy(next.date)} · {next.value == null ? '≈ ' : ''}<Money v={net(perNext * p.qty)} round /> на руки</span></div>
+            <div className="line small"><span className="muted">Следующий купон</span><span>{dmy(next.date)} · {next.value == null ? '≈ ' : ''}<Money v={net(perNext * p.qty)} /> на руки</span></div>
           )}
           {bond.matDate && <div className="line small"><span className="muted">Погашение</span><span>{dmy(bond.matDate)}</span></div>}
           <div className="muted small">ISIN {bond.isin} · обновлено {new Date(bond.updatedAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>

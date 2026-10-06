@@ -36,12 +36,11 @@ export function useAmountsHidden() {
   return useSyncExternalStore(cb => { listeners.add(cb); return () => listeners.delete(cb) }, readHidden)
 }
 
-/** Сумма; `round` — до целых (для итогов, где копейки только мешают). */
-export function Money({ v, cur = 'RUB', sign = false, round = false }: { v: number; cur?: Currency; sign?: boolean; round?: boolean }) {
+/** Сумма — всегда точно, с копейками (округление сбивало при переводе «всего остатка»). */
+export function Money({ v, cur = 'RUB', sign = false }: { v: number; cur?: Currency; sign?: boolean }) {
   const hidden = useAmountsHidden()
   if (hidden) return <span className="money">••••</span>
-  const val = round ? Math.round(v / 100) * 100 : v
-  return <span className="money">{sign && val > 0 ? '+' : ''}{formatMoney(val, cur)}</span>
+  return <span className="money">{sign && v > 0 ? '+' : ''}{formatMoney(v, cur)}</span>
 }
 
 /** Поле суммы: хранит строку, наружу отдаёт копейки через fromInput. */
@@ -52,6 +51,7 @@ export function AmountInput({ value, onChange, placeholder = '0', big = false, a
     <div className={['amount', big && 'big', tone].filter(Boolean).join(' ')}>
       <input
         inputMode="decimal"
+        autoComplete="off"
         value={value}
         placeholder={placeholder}
         autoFocus={autoFocus}

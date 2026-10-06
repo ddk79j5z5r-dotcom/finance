@@ -594,3 +594,9 @@ h3 { font-weight: 600; }
 .sheet.full .sheet-body { flex: 1; display: flex; flex-direction: column; }
 .sheet.full .entry { flex: 1; }
 .sheet.full .entry .keypad { margin-top: auto; }
+.amount-sub { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; }
+.all-btn { padding: 4px 10px; border-radius: 999px; background: var(--fill); color: var(--accent); font-size: 13px; font-weight: 600; }
+.donut-center { font-size: 13px; }
+.amount-sub { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; }
+.all-btn { padding: 4px 10px; border-radius: 999px; background: var(--fill); color: var(--accent); font-size: 13px; font-weight: 600; }
+.donut-center { font-size: 13px; }

@@ -42,17 +42,17 @@ export function Distribute({ data, tx, onClose }: { data: Data; tx: Tx; onClose:
           <div key={b} style={{ padding: '6px 0' }}>
             <div className="line" style={{ padding: 0 }}>
               <span>{b === 'needs' ? 'Оставить на нужды' : b === 'wants' ? 'На счета желаний' : 'Отложить в сбережения'}</span>
-              <strong className="num"><Money v={total[b]} round /></strong>
+              <strong className="num"><Money v={total[b]} /></strong>
             </div>
             {reservedBy(b).length > 0 && (
-              <div className="muted small">в т.ч. {reservedBy(b).map(r => `${r.recurring.name}${r.recurring.kind === 'topup' ? '' : ` (${dayLabel(r.recurring.day)})`} ${formatMoney(Math.round(r.rub / 100) * 100)}`).join(', ')}</div>
+              <div className="muted small">в т.ч. {reservedBy(b).map(r => `${r.recurring.name}${r.recurring.kind === 'topup' ? '' : ` (${dayLabel(r.recurring.day)})`} ${formatMoney(r.rub)}`).join(', ')}</div>
             )}
           </div>
         ))}
       </div>
       {d.goalSuggestions.length > 0 && (
         <p className="hint">
-          Отложить можно на цели: {d.goalSuggestions.map(s => `${s.goal.name} — ${formatMoney(Math.round(s.rub / 100) * 100)}`).join(', ')}.
+          Отложить можно на цели: {d.goalSuggestions.map(s => `${s.goal.name} — ${formatMoney(s.rub)}`).join(', ')}.
         </p>
       )}
       <p className="hint">Это подсказка — в учёт ничего не записывается. Переводы между счетами делай как обычно.</p>

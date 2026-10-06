@@ -150,6 +150,11 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
       </div>
       <div className="amount-sub">
         {hasOperator(expr) && minor ? <>= {formatMoney(minor, acc?.currency)}</> : rubHint != null ? <>≈ {formatMoney(rubHint)}</> : ' '}
+        {type === 'transfer' && acc && (data.bal.get(acc.id!) ?? 0) > 0 && (
+          <button type="button" className="all-btn" onClick={() => setExpr(amountToInput(data.bal.get(acc.id!) ?? 0))}>
+            Всё: {formatMoney(data.bal.get(acc.id!) ?? 0, acc.currency)}
+          </button>
+        )}
       </div>
 
       {type === 'expense' && !tx && recent.length > 0 && (
@@ -203,7 +208,7 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
         </label>
       </div>
 
-      <input className="comment" value={comment} onChange={e => setComment(e.target.value)} placeholder="Комментарий (необязательно)" />
+      <input className="comment" name="comment" autoComplete="off" enterKeyHint="done" value={comment} onChange={e => setComment(e.target.value)} placeholder="Комментарий (необязательно)" />
 
       {error && <div className="error">{error}</div>}
       <Keypad onKey={k => setExpr(e => applyKey(e, k))} onSave={save} saving={saving} />

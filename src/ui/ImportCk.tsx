@@ -123,7 +123,7 @@ export function ImportCk({ data, onDone }: { data: Data; onDone: () => void }) {
           <div className="row" key={c.name}>
             <div className="body">
               <div className="title">{c.name}</div>
-              <div className="sub">{c.count} оп. · <Money v={c.rub} round />{c.exists ? ' · уже есть' : ''}</div>
+              <div className="sub">{c.count} оп. · <Money v={c.rub} />{c.exists ? ' · уже есть' : ''}</div>
             </div>
             <div style={{ width: 170 }}>
               <Segmented className="small" value={buckets[c.name]} onChange={v => setBuckets(b => ({ ...b, [c.name]: v }))}

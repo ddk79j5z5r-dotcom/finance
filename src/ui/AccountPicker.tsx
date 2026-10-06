@@ -26,7 +26,7 @@ export function AccountPicker({ data, accounts, value, onChange, label, exclude 
           <span className="k">{label}</span>
           <span className="v">{acc?.name ?? 'Выбери счёт'}</span>
         </span>
-        {acc && <span className="bal"><Money v={data.bal.get(acc.id!) ?? 0} cur={acc.currency} round /></span>}
+        {acc && <span className="bal"><Money v={data.bal.get(acc.id!) ?? 0} cur={acc.currency} /></span>}
         <Icon name="right" size={18} />
       </button>
       {open && (
@@ -39,7 +39,7 @@ export function AccountPicker({ data, accounts, value, onChange, label, exclude 
                   <button key={a.id} type="button" className={`acc-bar acc-${data.colorOf(a)} ${a.id === value ? 'on' : ''}`}
                     onClick={() => { onChange(a.id!); setOpen(false) }}>
                     <span className="n">{a.name}</span>
-                    <span className="num"><Money v={data.bal.get(a.id!) ?? 0} cur={a.currency} round /></span>
+                    <span className="num"><Money v={data.bal.get(a.id!) ?? 0} cur={a.currency} /></span>
                     {a.id === value && <Icon name="check" size={18} />}
                   </button>
                 ))}

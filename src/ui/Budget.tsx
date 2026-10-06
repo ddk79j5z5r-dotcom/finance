@@ -56,19 +56,19 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
         {plan > 0 ? (
           <>
             <div className="line" style={{ padding: '2px 0' }}>
-              <span style={{ fontSize: 26, fontWeight: 650, letterSpacing: '-0.02em' }}><Money v={plan} round /></span>
+              <span style={{ fontSize: 26, fontWeight: 650, letterSpacing: '-0.02em' }}><Money v={plan} /></span>
               <span className="pct">{Math.round((fact / plan) * 100)}%</span>
             </div>
             <Bar value={fact} max={plan} thick color="var(--pos)" />
             <div className="line small">
-              <span>Факт <strong className="num"><Money v={fact} round /></strong></span>
-              <span className="muted">{plan >= fact ? 'Осталось ' : 'Перерасход '}<strong className={plan >= fact ? '' : 'neg'}><Money v={Math.abs(plan - fact)} round /></strong></span>
+              <span>Факт <strong className="num"><Money v={fact} /></strong></span>
+              <span className="muted">{plan >= fact ? 'Осталось ' : 'Перерасход '}<strong className={plan >= fact ? '' : 'neg'}><Money v={Math.abs(plan - fact)} /></strong></span>
             </div>
           </>
         ) : (
           <>
             <div className="line" style={{ padding: '2px 0' }}>
-              <span style={{ fontSize: 26, fontWeight: 650, letterSpacing: '-0.02em' }}><Money v={fact} round /></span>
+              <span style={{ fontSize: 26, fontWeight: 650, letterSpacing: '-0.02em' }}><Money v={fact} /></span>
               <span className="muted small">потрачено</span>
             </div>
             <p className="hint" style={{ marginBottom: 0 }}>Лимиты не заданы — нажми на категорию ниже, чтобы задать.</p>
@@ -79,7 +79,7 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
       <div className="card">
         <div className="line" style={{ paddingTop: 0 }}>
           <h3>Рекомендация {data.settings.rule.needs}/{data.settings.rule.wants}/{data.settings.rule.savings}</h3>
-          <span className="muted small">от дохода <Money v={income} round /></span>
+          <span className="muted small">от дохода <Money v={income} /></span>
         </div>
         {noExpected && <p className="hint">Укажи ожидаемые зарплату и аванс в «Ещё → Выплаты», чтобы план был виден с начала месяца.</p>}
         {BUCKETS.map(b => {
@@ -88,7 +88,7 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
             <div key={b} style={{ marginTop: 10 }}>
               <div className="line small" style={{ padding: 0 }}>
                 <span><strong>{ROLE_TITLE[b]}</strong> <span className="muted">{data.settings.rule[b]}%</span></span>
-                <span className="num"><Money v={s.spent} round /> <span className="muted">/ рек. <Money v={s.target} round /></span></span>
+                <span className="num"><Money v={s.spent} /> <span className="muted">/ рек. <Money v={s.target} /></span></span>
               </div>
               <Bar value={Math.max(0, s.spent)} max={s.target} color={`var(--${b})`} />
             </div>
@@ -113,11 +113,11 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
                   <>
                     <Bar value={e.spent} max={cap} color={`var(--${e.category.bucket})`} />
                     <div className="small num muted">
-                      <Money v={e.spent} round /> из <Money v={cap} round /> ·{' '}
-                      <span className={e.available < 0 ? 'neg' : ''}>{e.available < 0 ? 'перерасход ' : 'осталось '}{formatMoney(Math.round(Math.abs(e.available) / 100) * 100)}</span>
+                      <Money v={e.spent} /> из <Money v={cap} /> ·{' '}
+                      <span className={e.available < 0 ? 'neg' : ''}>{e.available < 0 ? 'перерасход ' : 'осталось '}{formatMoney(Math.abs(e.available))}</span>
                     </div>
                   </>
-                ) : <div className="sub">{e.spent > 0 && <><Money v={e.spent} round /> · </>}лимит не задан</div>}
+                ) : <div className="sub">{e.spent > 0 && <><Money v={e.spent} /> · </>}лимит не задан</div>}
               </div>
               </button>
               {e.spent > 0 && (
@@ -168,8 +168,8 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
                     <div className="sub">{fundLabel(r)}</div>
                   </div>
                   <div className="amt">
-                    <Money v={r.amount} cur={r.currency} round />
-                    <div className={`small ${inMonth >= r.amount ? 'pos' : 'muted'}`}>{inMonth >= r.amount ? '✓ пополнено' : <>внесено <Money v={inMonth} round /></>}</div>
+                    <Money v={r.amount} cur={r.currency} />
+                    <div className={`small ${inMonth >= r.amount ? 'pos' : 'muted'}`}>{inMonth >= r.amount ? '✓ пополнено' : <>внесено <Money v={inMonth} /></>}</div>
                   </div>
                 </div>
               )

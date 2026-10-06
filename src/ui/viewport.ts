@@ -5,27 +5,48 @@
  *   --vvh  — высота видимой области,
  *   --vvtop — её сдвиг сверху (iOS иногда прокручивает страницу при фокусе),
  *   --kb   — высота клавиатуры (0, если скрыта).
- * Окна (.sheet-backdrop) позиционируются по этим переменным и оказываются ровно над клавиатурой.
+ * Класс .kb-open — пока открыта системная клавиатура (или в фокусе текстовое поле):
+ * своя цифровая клавиатура и нижняя панель на это время прячутся.
  */
+const TEXT_INPUT = 'input:not([type=checkbox]):not([type=radio]):not([type=file]):not([readonly]), textarea, select'
+
 export function trackVisualViewport() {
   const vv = window.visualViewport
   const root = document.documentElement
-  if (!vv) return
+  // Полная высота экрана: в установленном приложении iOS при клавиатуре может уменьшаться и innerHeight,
+  // поэтому запоминаем максимум (и сбрасываем при повороте).
+  let fullH = window.innerHeight
+  let textFocused = false
+
   const update = () => {
-    const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+    if (!vv) { root.classList.toggle('kb-open', textFocused); return }
+    if (!textFocused) fullH = Math.max(fullH, window.innerHeight, vv.height + vv.offsetTop)
+    const kb = Math.max(0, fullH - vv.height - vv.offsetTop)
     root.style.setProperty('--vvh', `${vv.height}px`)
     root.style.setProperty('--vvtop', `${vv.offsetTop}px`)
     root.style.setProperty('--kb', `${kb}px`)
-    root.classList.toggle('kb-open', kb > 80)
+    root.classList.toggle('kb-open', textFocused || kb > 80)
   }
-  vv.addEventListener('resize', update)
-  vv.addEventListener('scroll', update)
-  update()
 
-  // Поле, в которое начали вводить, — в центр видимой части окна, когда клавиатура уже открылась.
+  vv?.addEventListener('resize', update)
+  vv?.addEventListener('scroll', update)
+  window.addEventListener('orientationchange', () => setTimeout(() => { fullH = window.innerHeight; update() }, 400))
+
   document.addEventListener('focusin', e => {
     const el = e.target as HTMLElement
-    if (!el.matches('input:not([type=checkbox]):not([type=file]), textarea, select')) return
-    setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300)
+    if (!el.matches?.(TEXT_INPUT)) return
+    textFocused = true
+    update()
+    // Когда клавиатура откроется — поле в центр видимой части окна.
+    setTimeout(() => { update(); el.scrollIntoView({ block: 'center', behavior: 'smooth' }) }, 350)
   })
+  document.addEventListener('focusout', e => {
+    if (!(e.target as HTMLElement).matches?.(TEXT_INPUT)) return
+    // Небольшая задержка: фокус может сразу перейти в соседнее поле.
+    setTimeout(() => {
+      textFocused = !!document.activeElement?.matches(TEXT_INPUT)
+      update()
+    }, 120)
+  })
+  update()
 }
