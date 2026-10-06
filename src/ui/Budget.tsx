@@ -95,9 +95,6 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
             </div>
           )
         })}
-        <p className="hint" style={{ margin: '10px 0 0', fontSize: 13 }}>
-          Считается по счетам: желания и сбережения — сколько за месяц ушло на счета этой роли, нужды — что осталось на картах и счетах-нуждах. Роль копилки — в её настройках.
-        </p>
       </div>
 
       <div className="section-title stack"><h3>Категории</h3><span className="muted small">нажми — лимит, <Icon name="list" size={13} /> — операции</span></div>
@@ -107,12 +104,12 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
           return (
             <div className="row" key={e.category.id}>
               <button className="row-main" style={{ alignItems: 'flex-start' }} onClick={() => setLimitFor(e.category)}>
-              <Badge icon={categoryIcon(e.category)} tone={e.category.bucket} />
+              <Badge icon={categoryIcon(e.category)} tone="needs" />
               <div className="body">
                 <div className="title">{e.category.name}</div>
                 {cap > 0 ? (
                   <>
-                    <Bar value={e.spent} max={cap} color={`var(--${e.category.bucket})`} />
+                    <Bar value={e.spent} max={cap} color="var(--accent)" />
                     <div className="small num muted">
                       <Money v={e.spent} /> из <Money v={cap} /> ·{' '}
                       <span className={e.available < 0 ? 'neg' : ''}>{e.available < 0 ? 'перерасход ' : 'осталось '}{formatMoney(Math.abs(e.available))}</span>

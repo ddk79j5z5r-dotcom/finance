@@ -162,7 +162,7 @@ export function EventRow({ e, data, today, thin }: { e: PlannedEvent; data: Data
     const root = cat?.parentId != null ? data.categories.find(c => c.id === cat.parentId) : cat
     return (
       <div className="row">
-        <Lead icon={categoryIcon(root)} tone={cat?.bucket ?? root?.bucket ?? 'needs'} thin={thin} />
+        <Lead icon={categoryIcon(root)} tone="needs" thin={thin} />
         <div className="body">
           <div className="title">{r.name}</div>
           <div className="sub">{[shortDate(e.date), inDays(e.date, today)].filter(Boolean).join(' · ')}</div>

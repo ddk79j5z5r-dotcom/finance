@@ -3,7 +3,7 @@ import { BACKUP_TABLES, type BackupTable, type FinanceDB } from '../db'
 import { balances, envelopes, fxLoss, goalProgress, rootOf } from './calc'
 import { monthOf, shiftMonth, todayISO, toMajor } from './money'
 import { convertToRub } from './rates'
-import { BUCKET_LABEL, INCOME_LABEL, type Rate } from './types'
+import { INCOME_LABEL, type Rate } from './types'
 
 const BACKUP_SHEET = '_backup'
 const BACKUP_VERSION = 1
@@ -60,7 +60,7 @@ export async function exportWorkbook(db: FinanceDB): Promise<ArrayBuffer> {
   addTable(wb, 'Операции', [
     { name: 'Дата', width: 12, fmt: 'dd.mm.yyyy' }, { name: 'Тип', width: 10 }, { name: 'Счёт', width: 16 },
     { name: 'Валюта', width: 8 }, { name: 'Сумма', fmt: NUM_FMT }, { name: 'Сумма ₽', fmt: RUB_FMT },
-    { name: 'Категория', width: 20 }, { name: 'Подкатегория', width: 16 }, { name: 'Тип траты', width: 12 },
+    { name: 'Категория', width: 20 }, { name: 'Подкатегория', width: 16 },
     { name: 'Вид дохода', width: 14 }, { name: 'Счёт зачисления', width: 16 }, { name: 'Сумма зачисления', fmt: NUM_FMT },
     { name: 'Разница курса ₽', fmt: RUB_FMT }, { name: 'Комментарий', width: 30 },
   ], txs.map(t => {
@@ -69,7 +69,7 @@ export async function exportWorkbook(db: FinanceDB): Promise<ArrayBuffer> {
     return [
       new Date(t.date + 'T00:00:00Z'), TYPE[t.type], acc.get(t.accountId)?.name ?? '', acc.get(t.accountId)?.currency ?? '',
       toMajor(t.amount), toMajor(t.rub),
-      root?.name ?? null, c && c.parentId != null ? c.name : null, root ? BUCKET_LABEL[root.bucket] : null,
+      root?.name ?? null, c && c.parentId != null ? c.name : null,
       t.incomeKind ? INCOME_LABEL[t.incomeKind] : null,
       t.toAccountId != null ? acc.get(t.toAccountId)?.name ?? '' : null,
       t.toAmount != null ? toMajor(t.toAmount) : null,
@@ -93,12 +93,12 @@ export async function exportWorkbook(db: FinanceDB): Promise<ArrayBuffer> {
     for (let m = firstMonth; m <= monthOf(todayISO()); m = shiftMonth(m, 1)) {
       for (const e of envelopes(categories, limits, txs, m)) {
         if (!e.limit && !e.spent) continue
-        budgetRows.push([m, e.category.name, BUCKET_LABEL[e.category.bucket], toMajor(e.limit), toMajor(e.spent), toMajor(e.available)])
+        budgetRows.push([m, e.category.name, toMajor(e.limit), toMajor(e.spent), toMajor(e.available)])
       }
     }
   }
   addTable(wb, 'Бюджет', [
-    { name: 'Месяц', width: 10 }, { name: 'Конверт', width: 22 }, { name: 'Тип', width: 12 },
+    { name: 'Месяц', width: 10 }, { name: 'Конверт', width: 22 },
     { name: 'Лимит ₽', fmt: RUB_FMT }, { name: 'Потрачено ₽', fmt: RUB_FMT }, { name: 'Доступно ₽', fmt: RUB_FMT },
   ], budgetRows)
 

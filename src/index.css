@@ -619,3 +619,8 @@ h3 { font-weight: 600; }
 .rule-row .line > :last-child { white-space: nowrap; }
 .rule-row .rec { margin-top: 3px; font-size: 13px; }
 .section-title.stack { flex-direction: column; align-items: flex-start; gap: 2px; }
+
+/* Полноэкранное окно ввода: отступ под полоску «домой» даёт сама клавиатура суммы — без второго отступа снизу. */
+.sheet.full { padding-bottom: 0; }
+.kb-open .sheet.full { padding-bottom: var(--kb, 0px); }
+.sheet.full .keypad { padding-bottom: calc(6px + env(safe-area-inset-bottom)); }

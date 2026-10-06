@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { db, saveSettings } from '../db'
 import { refreshLatestRate } from '../domain/rates'
-import { BUCKET_LABEL, BUCKETS, CURRENCIES, type Bucket, type Category, type Currency, type Recurring } from '../domain/types'
+import { BUCKET_LABEL, BUCKETS, CURRENCIES, type Category, type Currency, type Recurring } from '../domain/types'
 import { disableLock, enrollFaceId, faceIdSupported, getLock, isLockEnabled, setPin } from '../lock'
 import { AmountInput, Bar, Chips, CUR_SUFFIX, fromInput, Money, Sheet, toInput, useOnce } from './common'
 import { setupSteps } from '../domain/calc'
@@ -162,29 +162,22 @@ function CategoriesSection({ data }: { data: Data }) {
     <>
       {edit ? <CategoryForm data={data} cat={edit} onDone={() => setEdit(null)} /> : (
         <>
-          <p className="hint">Тип категории — для цвета и подсказок. В правиле 50/30/20 он не участвует: правило считается по ролям счетов.</p>
-          {BUCKETS.filter(b => b !== 'savings').map(b => (
-            <div key={b}>
-              <div className="day">{BUCKET_LABEL[b]}</div>
-              <div className="card tight">
-                {roots.filter(c => c.bucket === b).map(c => (
-                  <div key={c.id}>
-                    <button className="row" onClick={() => setEdit(c)}>
-                      <span>{c.name}{accName(c.accountId) && <span className="muted small"> · {accName(c.accountId)}</span>}</span><span className="muted">›</span>
-                    </button>
-                    {childrenOf(data.categories, c.id!).map(s => (
-                      <button className="row" style={{ paddingLeft: 20 }} key={s.id} onClick={() => setEdit(s)}>
-                        <span>{s.name}{s.bucket !== c.bucket && <span className={`pill small tone-${s.bucket}`} style={{ marginLeft: 8 }}>{BUCKET_LABEL[s.bucket].toLowerCase()}</span>}</span>
-                        <span className="muted">›</span>
-                      </button>
-                    ))}
-                    <button className="link small" style={{ display: 'block', padding: '4px 0 12px 20px' }} onClick={() => setEdit({ parentId: c.id!, bucket: c.bucket })}>+ подкатегория</button>
-                  </div>
+          <div className="card tight">
+            {roots.map(c => (
+              <div key={c.id}>
+                <button className="row" onClick={() => setEdit(c)}>
+                  <span>{c.name}{accName(c.accountId) && <span className="muted small"> · {accName(c.accountId)}</span>}</span><span className="muted">›</span>
+                </button>
+                {childrenOf(data.categories, c.id!).map(s => (
+                  <button className="row" style={{ paddingLeft: 20 }} key={s.id} onClick={() => setEdit(s)}>
+                    <span>{s.name}</span><span className="muted">›</span>
+                  </button>
                 ))}
+                <button className="link small" style={{ display: 'block', padding: '4px 0 12px 20px' }} onClick={() => setEdit({ parentId: c.id!, bucket: c.bucket })}>+ подкатегория</button>
               </div>
-            </div>
-          ))}
-          <button className="secondary" onClick={() => setEdit({ parentId: null, bucket: 'wants' })}>+ Категория</button>
+            ))}
+          </div>
+          <button className="secondary" onClick={() => setEdit({ parentId: null, bucket: 'needs' })}>+ Категория</button>
         </>
       )}
     </>
@@ -193,19 +186,11 @@ function CategoriesSection({ data }: { data: Data }) {
 
 function CategoryForm({ data, cat, onDone }: { data: Data; cat: Partial<Category>; onDone: () => void }) {
   const [name, setName] = useState(cat.name ?? '')
-  const [bucket, setBucket] = useState<Bucket>(cat.bucket ?? 'wants')
   const [accountId, setAccountId] = useState<number | null>(cat.accountId ?? null)
   const isSub = cat.parentId != null
-  const parent = isSub ? data.categories.find(c => c.id === cat.parentId) : undefined
   const save = useOnce(async () => {
     if (!name.trim()) return
-    await db.transaction('rw', db.categories, async () => {
-      const id = await db.categories.put({ ...(cat as Category), name: name.trim(), bucket, accountId, parentId: cat.parentId ?? null, archived: cat.archived ?? false })
-      // Подкатегории, у которых тип совпадал с родителем, меняются вместе с ним; свои типы сохраняются.
-      if (!isSub && cat.bucket && cat.bucket !== bucket) {
-        for (const c of childrenOf(data.categories, id!)) if (c.bucket === cat.bucket) await db.categories.update(c.id!, { bucket })
-      }
-    })
+    await db.categories.put({ ...(cat as Category), name: name.trim(), bucket: cat.bucket ?? 'needs', accountId, parentId: cat.parentId ?? null, archived: cat.archived ?? false })
     onDone()
   })
   const archive = useOnce(async () => {
@@ -217,9 +202,6 @@ function CategoryForm({ data, cat, onDone }: { data: Data; cat: Partial<Category
     <>
       <label className="field-label">Название</label>
       <input value={name} onChange={e => setName(e.target.value)} autoFocus={!cat.id} />
-      <label className="field-label">Тип</label>
-      <Chips options={(['needs', 'wants'] as Bucket[]).map(b => ({ value: b, label: BUCKET_LABEL[b] }))} value={bucket} onChange={setBucket} />
-      {isSub && parent && bucket !== parent.bucket && <p className="hint">Траты в «{name || 'подкатегории'}» пойдут в «{BUCKET_LABEL[bucket]}», хотя конверт «{parent.name}» — «{BUCKET_LABEL[parent.bucket]}».</p>}
       <label className="field-label">Счёт по умолчанию</label>
       <select value={accountId ?? ''} onChange={e => setAccountId(e.target.value ? Number(e.target.value) : null)}>
         <option value="">{isSub ? 'Как у родительской категории' : 'Основной счёт'}</option>

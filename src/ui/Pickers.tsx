@@ -37,7 +37,7 @@ export function CategoryPicker({ data, roots, rootId, subId, onPick, open, setOp
   return (
     <>
       <PickRow
-        icon={root ? <Badge icon={categoryIcon(root)} tone={sub?.bucket ?? root.bucket} size={36} /> : <span className="badge tone-transfer" style={{ width: 36, height: 36 }}><Icon name="tag" size={18} /></span>}
+        icon={root ? <Badge icon={categoryIcon(root)} tone="needs" size={36} /> : <span className="badge tone-transfer" style={{ width: 36, height: 36 }}><Icon name="tag" size={18} /></span>}
         label="Куда" value={root ? (sub ? `${root.name} · ${sub.name}` : root.name) : 'Выбери категорию'} empty={!root}
         onClick={() => setOpen(true)} />
       {open && (
@@ -46,7 +46,7 @@ export function CategoryPicker({ data, roots, rootId, subId, onPick, open, setOp
             <>
               <div className="card tight">
                 <button className="row" onClick={() => { onPick(step.id!, null); close() }}>
-                  <Badge icon={categoryIcon(step)} tone={step.bucket} />
+                  <Badge icon={categoryIcon(step)} tone="needs" />
                   <span className="body title">Без подкатегории</span>
                   {rootId === step.id && subId == null && <Icon name="check" size={18} />}
                 </button>
@@ -64,7 +64,7 @@ export function CategoryPicker({ data, roots, rootId, subId, onPick, open, setOp
             <div className="tile-grid">
               {roots.map(c => (
                 <button key={c.id} type="button" className={c.id === rootId ? 'tile-btn on' : 'tile-btn'} onClick={() => pickRoot(c)}>
-                  <span className={`badge tone-${c.bucket}`}><Icon name={categoryIcon(c)} size={22} /></span>
+                  <span className="badge tone-needs"><Icon name={categoryIcon(c)} size={22} /></span>
                   <span className="tile-label">{c.name}{childrenOf(data.categories, c.id!).length > 0 && ' ›'}</span>
                 </button>
               ))}

@@ -2,8 +2,8 @@ import { useRef, useState } from 'react'
 import { db, saveSettings } from '../db'
 import { balances } from '../domain/calc'
 import { applyCoinKeeper, CkError, previewCoinKeeper, type CkPreview, type CkResult } from '../domain/coinkeeper'
-import { BUCKET_LABEL, INCOME_LABEL, type Bucket } from '../domain/types'
-import { Money, Segmented, useOnce } from './common'
+import { INCOME_LABEL, type Bucket } from '../domain/types'
+import { Money, useOnce } from './common'
 import type { Data } from './data'
 import { Icon } from './icons'
 
@@ -117,17 +117,13 @@ export function ImportCk({ data, onDone }: { data: Data; onDone: () => void }) {
         {newAccounts.length > 0 && <p className="hint">Будет создано новых: {newAccounts.length}.</p>}
       </div>
 
-      <h3 style={{ margin: '16px 2px 8px' }}>Категории — нужда или желание?</h3>
+      <h3 style={{ margin: '16px 2px 8px' }}>Категории</h3>
       <div className="card tight">
         {preview.categories.map(c => (
           <div className="row" key={c.name}>
             <div className="body">
               <div className="title">{c.name}</div>
               <div className="sub">{c.count} оп. · <Money v={c.rub} />{c.exists ? ' · уже есть' : ''}</div>
-            </div>
-            <div style={{ width: 170 }}>
-              <Segmented className="small" value={buckets[c.name]} onChange={v => setBuckets(b => ({ ...b, [c.name]: v }))}
-                options={(['needs', 'wants'] as Bucket[]).map(b => ({ value: b, label: BUCKET_LABEL[b] }))} />
             </div>
           </div>
         ))}

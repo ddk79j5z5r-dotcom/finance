@@ -127,12 +127,12 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
       {env && (
         <div className="card">
           <div className="line" style={{ paddingTop: 0 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Badge icon={categoryIcon(cat)} tone={cat!.bucket} size={34} /><strong>{cat!.name}</strong></span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Badge icon={categoryIcon(cat)} tone="needs" size={34} /><strong>{cat!.name}</strong></span>
             <button className="link" onClick={() => setLimitOpen(true)}>{env.limit ? 'Изменить лимит' : 'Задать лимит'}</button>
           </div>
           {env.limit > 0 ? (
             <>
-              <Bar value={env.spent} max={env.limit} color={`var(--${cat!.bucket})`} />
+              <Bar value={env.spent} max={env.limit} color="var(--accent)" />
               <div className="muted small">
                 потрачено <Money v={env.spent} /> из <Money v={env.limit} /> ·{' '}
                 <span className={env.available < 0 ? 'neg' : ''}>{env.available < 0 ? 'перерасход' : 'осталось'} <Money v={Math.abs(env.available)} /></span>
