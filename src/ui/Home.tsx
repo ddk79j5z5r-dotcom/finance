@@ -62,7 +62,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
         </button>
       </div>
 
-      <div className="air-balance glass">
+      <div className="air-balance glass tint-y">
         <span className="k">Общий баланс</span>
         <span className="big"><Money v={total} /></span>
         {!hidden && delta !== 0 && (
@@ -119,7 +119,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
         )}
       </div>
 
-      <div className="air-section glass tight">
+      <div className="air-section glass tight tint-b">
         <div className="air-title" style={{ paddingTop: 12 }}><span>Ближайшие платежи</span><button className="link" onClick={onOpenCalendar}>Все</button></div>
         {items.length === 0 && <p className="hint">Добавь аренду и кредит в «Ещё → Регулярные платежи».</p>}
         <div className="air-list">

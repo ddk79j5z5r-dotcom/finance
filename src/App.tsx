@@ -111,11 +111,11 @@ export default function App() {
 
       <nav className="tabs">
         {TABS.map(t => t.id === 'add' ? (
-          <button key="add" className="fab" aria-label="Добавить операцию" onClick={() => setAdding(true)}><Icon name="plus" size={28} stroke={2.4} /></button>
+          <button key="add" className="fab" aria-label="Добавить операцию" onClick={() => setAdding(true)}><Icon name="plus" size={24} stroke={2.4} /></button>
         ) : (
-          <button key={t.id} className={tab === t.id ? 'on' : ''} onClick={() => { setTab(t.id as Tab); if (t.id === 'more') setMorePage(null); if (t.id === 'history') setOpsFilter({}) }}>
-            <Icon name={t.icon} size={24} />
-            {t.label}
+          <button key={t.id} aria-label={t.label} aria-current={tab === t.id ? 'page' : undefined} className={tab === t.id ? 'on' : ''} onClick={() => { setTab(t.id as Tab); if (t.id === 'more') setMorePage(null); if (t.id === 'history') setOpsFilter({}) }}>
+            <Icon name={t.icon} size={22} />
+            <span className="lbl">{t.label}</span>
           </button>
         ))}
       </nav>

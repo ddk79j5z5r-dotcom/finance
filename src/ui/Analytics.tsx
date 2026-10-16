@@ -89,15 +89,15 @@ function Overview({ data, ins, open, onOpenOps }: { data: Data; ins: Insights; o
   return (
     <>
       <h1>Аналитика</h1>
-      <button className="an-tile" onClick={() => open('capital')}>
+      <button className="an-tile tint-g" onClick={() => open('capital')}>
         <span className="t"><span className="v"><Money v={ins.capital} /></span><span className="k">Денег всего</span></span>
         <MiniLine values={[...ins.history, ins.capitalEnd]} />
       </button>
-      <button className="an-tile" onClick={() => open('remainder')}>
+      <button className="an-tile tint-v" onClick={() => open('remainder')}>
         <span className="t"><span className="v"><Money v={cur.income - cur.expense} /></span><span className="k">Остаток от дохода</span></span>
         <MiniBars pairs={pairs} />
       </button>
-      <button className="an-tile" onClick={() => open('pace')}>
+      <button className="an-tile tint-a" onClick={() => open('pace')}>
         <span className="t"><span className="v small">{paceWord(ins.paceDiff)}</span><span className="k">Траты к этому дню</span></span>
         <MiniPace spent={ins.spent.slice(0, day)} avg={ins.avg} />
       </button>
@@ -313,7 +313,7 @@ function AreaLine({ values, labels, compact = false }: { values: number[]; label
       <path d={smoothPath(solid)} fill="none" stroke="var(--c-capital)" strokeWidth="2.5" strokeLinecap="round" />
       <path d={`M${last[0]},${last[1]}L${pts[n - 1][0]},${pts[n - 1][1]}`} fill="none" stroke="var(--c-capital)" strokeWidth="2.5" strokeDasharray="6 6" strokeLinecap="round" />
       {!compact && <line x1={pts[shown][0]} x2={pts[shown][0]} y1={top - 6} y2={bottom} className="an-cross" />}
-      <circle cx={pts[shown][0]} cy={pts[shown][1]} r="7" fill="var(--card)" stroke="var(--c-capital)" strokeWidth="3" />
+      <circle cx={pts[shown][0]} cy={pts[shown][1]} r="7" fill="var(--solid)" stroke="var(--c-capital)" strokeWidth="3" />
       {!compact && !hidden && (
         <text className="an-val" x={Math.min(W - 44, Math.max(44, pts[shown][0]))} y={Math.max(12, pts[shown][1] - 14)} textAnchor="middle">
           {formatMoney(values[shown])}
@@ -357,7 +357,7 @@ function PaceChart({ spent, avg, day, days, interactive = false }: { spent: numb
       {avgPts && <path d={smoothPath(avgPts)} fill="none" stroke="var(--c-avg)" strokeWidth="2.5" strokeDasharray="6 6" strokeLinecap="round" />}
       {now.length > 1 && <path d={`${smoothPath(now)}L${end[0]},${bottom}L0,${bottom}Z`} fill="url(#paceFill)" />}
       {now.length > 1 && <path d={smoothPath(now)} fill="none" stroke="var(--c-pace)" strokeWidth="2.5" strokeLinecap="round" />}
-      <circle cx={end[0]} cy={end[1]} r="7" fill="var(--card)" stroke="var(--c-pace)" strokeWidth="3" />
+      <circle cx={end[0]} cy={end[1]} r="7" fill="var(--solid)" stroke="var(--c-pace)" strokeWidth="3" />
       {interactive && hover != null && (
         <>
           <line x1={x(h)} x2={x(h)} y1={top} y2={bottom} className="an-cross" />
