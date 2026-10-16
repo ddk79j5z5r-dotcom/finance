@@ -3,7 +3,7 @@ import type { LockRow } from './db'
 import type { Tx } from './domain/types'
 import { getLock, isLockEnabled } from './lock'
 import { Accounts } from './ui/Accounts'
-import { Analytics, type Mode } from './ui/Analytics'
+import { Analytics, type AnalyticsView } from './ui/Analytics'
 import { Budget } from './ui/Budget'
 import { Calendar } from './ui/Calendar'
 import { Sheet } from './ui/common'
@@ -31,7 +31,7 @@ export default function App() {
   const data = useData()
   const [tab, setTab] = useState<Tab>('home')
   const [morePage, setMorePage] = useState<MorePage | null>(null)
-  const [analyticsMode, setAnalyticsMode] = useState<Mode>('expense')
+  const [analyticsView, setAnalyticsView] = useState<AnalyticsView>('overview')
   const [section, setSection] = useState<MoreSection | null>(null)
   const [adding, setAdding] = useState(false)
   const [lock, setLock] = useState<LockRow | null>(null)
@@ -74,23 +74,26 @@ export default function App() {
         {tab === 'home' && (
           <Home data={data} onDistribute={setDistribute} onOpenBudget={() => setTab('budget')}
             onOpenCalendar={() => openMore('calendar')} onOpenBackup={() => openMore(null, 'backup')} onOpenAccounts={() => openMore('accounts')}
-            onOpenAnalytics={m => { setAnalyticsMode(m); openMore('analytics') }} />
+            onOpenAnalytics={() => { setAnalyticsView('remainder'); openMore('analytics') }} />
         )}
         {tab === 'history' && <History data={data} filter={opsFilter} setFilter={setOpsFilter} />}
         {tab === 'budget' && <Budget data={data} onDistribute={setDistribute} onOpenOps={openOps} />}
-        {tab === 'more' && morePage && (
+        {tab === 'more' && morePage === 'analytics' && (
+          <Analytics key={analyticsView} data={data} initialView={analyticsView} onOpenOps={openOps}
+            onBack={() => (analyticsView === 'overview' ? setMorePage(null) : setTab('home'))} />
+        )}
+        {tab === 'more' && morePage && morePage !== 'analytics' && (
           <div>
             <div className="page" style={{ paddingBottom: 0 }}>
               <button className="back" onClick={() => setMorePage(null)}><Icon name="left" size={20} /> Ещё</button>
             </div>
             <div style={{ marginTop: -18 }}>
               {morePage === 'calendar' && <Calendar data={data} />}
-              {morePage === 'analytics' && <Analytics data={data} initialMode={analyticsMode} onOpenOps={openOps} />}
               {morePage === 'accounts' && <Accounts data={data} onOpenOps={openOps} />}
             </div>
           </div>
         )}
-        {tab === 'more' && !morePage && <More data={data} section={section} setSection={setSection} onOpenPage={p => { setAnalyticsMode('expense'); setMorePage(p) }} />}
+        {tab === 'more' && !morePage && <More data={data} section={section} setSection={setSection} onOpenPage={p => { setAnalyticsView('overview'); setMorePage(p) }} />}
       </main>
 
       {notice && (

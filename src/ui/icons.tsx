@@ -87,12 +87,20 @@ export const INCOME_ICON: Record<IncomeKind, IconName> = {
   salary: 'banknote', advance: 'banknote', bonus: 'star', interest: 'percent', gift: 'users', other: 'income',
 }
 
-/** Тонкая иконка с маленькой цветной точкой типа (нужды / желания / сбережения / доход / перевод). */
-export function Badge({ icon, tone, size = 40 }: { icon: IconName; tone: Bucket | 'income' | 'transfer' | 'coupon'; size?: number }) {
+/** Цвет круглого значка — по смыслу иконки (как у категорий в банковских приложениях). */
+const ICON_COLOR: Partial<Record<IconName, string>> = {
+  home: '#3d8bfd', card: '#7a6cf0', cart: '#f2588a', car: '#2fa4f0', bus: '#f5a623', phone: '#20b8a8',
+  heart: '#f0544f', shirt: '#b065ea', coffee: '#f47b2a', ticket: '#de5ac8', repeat: '#4cb8ec', gift: '#f2647f',
+  plane: '#2fb3e6', book: '#8a72f2', transfer: '#22a98f', banknote: '#2fb36a', star: '#f0a81c', percent: '#9b6bff',
+  users: '#f07aa5', income: '#2fb36a', target: '#2fb36a', wallet: '#3d8bfd', tag: '#8a93a0',
+}
+
+/** Круглый цветной значок с белой иконкой. */
+export function Badge({ icon, tone, size = 40 }: { icon: IconName; tone?: Bucket | 'income' | 'transfer' | 'coupon'; size?: number }) {
+  const bg = tone === 'coupon' ? 'var(--coupon)' : tone === 'income' && icon !== 'star' && icon !== 'percent' ? ICON_COLOR.income : ICON_COLOR[icon] ?? ICON_COLOR.tag
   return (
-    <span className="thin-ico" style={{ width: size, height: size }}>
-      <Icon name={icon} size={Math.round(size * 0.58)} stroke={1.6} />
-      <i className={`tone-dot tone-${tone}`} />
+    <span className="ico" style={{ width: size, height: size, background: bg }}>
+      <Icon name={icon} size={Math.round(size * 0.5)} stroke={2} />
     </span>
   )
 }

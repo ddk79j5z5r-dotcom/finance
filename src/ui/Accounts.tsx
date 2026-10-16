@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { db, saveSettings } from '../db'
 import { moveAndDeleteAccount } from '../domain/accounts'
-import { accountKind, accountRole, monthsUntil } from '../domain/calc'
+import { accountKind, monthsUntil } from '../domain/calc'
 import type { Position } from '../domain/bonds'
 import { AddBondSheet, BondList, PositionSheet } from './Bonds'
 import { formatMoney, monthGenitive, monthOf, plural, todayISO } from '../domain/money'
-import { ACCOUNT_COLORS, BUCKET_LABEL, CURRENCIES, type Account, type AccountColor, type AccountKind, type Bucket, type Currency } from '../domain/types'
+import { ACCOUNT_COLORS, CURRENCIES, type Account, type AccountColor, type AccountKind, type Currency } from '../domain/types'
 import { AccountBadge, COLOR_LABEL } from './AccountBadge'
 import { AmountInput, Bar, Chips, CUR_SUFFIX, fromInput, Money, Sheet, toInput, useOnce } from './common'
 import { activeAccounts, rateHint, type Data } from './data'
@@ -113,7 +113,6 @@ function AccountSheet({ data, acc, onClose, onOpenOps }: { data: Data; acc: Part
   const [color, setColor] = useState<AccountColor | null>(acc.color ?? null)
   const shownColor = color ?? (acc.id != null ? data.colorOf(acc as Account) : null)
   const [showOnHome, setShowOnHome] = useState(!!acc.showOnHome)
-  const [role, setRole] = useState<Bucket>(acc.id != null ? accountRole(acc as Account, data.goals) : 'savings')
   // Копилка = цель: сумма и срок прямо у счёта (одна цель на копилку, называется как счёт).
   const goal = acc.id != null ? data.goals.filter(g => g.accountId === acc.id).sort((a, b) => a.priority - b.priority)[0] : undefined
   const [target, setTarget] = useState(toInput(goal?.target))
@@ -131,7 +130,6 @@ function AccountSheet({ data, acc, onClose, onOpenOps }: { data: Data; acc: Part
         ? acc.openingBalance ?? 0 // поле очистили при отрицательном балансе — ничего не меняем
         : (acc.openingBalance ?? 0) + ((fromInput(now) ?? 0) - current),
       archived: acc.archived ?? false, order: acc.order ?? data.accounts.length, kind, color: color ?? undefined, showOnHome, taxFree,
-      role: kind === 'savings' ? role : undefined, savings: undefined,
     })
     if (isDefault) await saveSettings({ defaultAccountId: id })
     const t = kind !== 'card' ? fromInput(target) : null
@@ -182,18 +180,6 @@ function AccountSheet({ data, acc, onClose, onOpenOps }: { data: Data; acc: Part
         ))}
       </div>
       <label className="check"><input type="checkbox" checked={showOnHome} onChange={e => setShowOnHome(e.target.checked)} /> Показывать на главной под балансом</label>
-      {kind === 'savings' && (
-        <>
-          <label className="field-label">Роль в 50/30/20</label>
-          <Chips options={(['needs', 'wants', 'savings'] as Bucket[]).map(b => ({ value: b, label: BUCKET_LABEL[b] }))} value={role} onChange={setRole} />
-          <p className="hint" style={{ marginTop: 6 }}>
-            {role === 'needs' ? 'Резерв под обязательное — «Квартплата», «Кредиты». Переводы сюда не уменьшают «нужды».'
-              : role === 'wants' ? 'Деньги «для себя» — «Game», «Aristo project». Переводы сюда идут в «желания».'
-              : 'Подушка, накопления. Переводы сюда (и проценты на нём) идут в «сбережения».'}
-          </p>
-        </>
-      )}
-      {kind === 'broker' && <p className="hint">Брокерский счёт всегда считается сбережениями.</p>}
       {kind !== 'card' && (
         <>
           <label className="field-label">Цель <span className="muted">(необязательно)</span></label>

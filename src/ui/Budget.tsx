@@ -1,30 +1,25 @@
 import { useState } from 'react'
 import { db } from '../db'
-import { bucketStates, envelopes, isPaid, planIncome } from '../domain/calc'
+import { envelopes, isPaid } from '../domain/calc'
 import { formatMoney, monthLabel, monthOf, shiftMonth, todayISO } from '../domain/money'
-import { BUCKETS, INCOME_LABEL, type Category, type Recurring, type Tx } from '../domain/types'
+import { INCOME_LABEL, type Category, type Recurring, type Tx } from '../domain/types'
 import { AmountInput, Bar, fromInput, Money, MonthNav, Sheet, toInput, useOnce } from './common'
 import { AccountBadge } from './AccountBadge'
 import type { Data } from './data'
 import type { OpsFilter } from './History'
 import { Badge, categoryIcon, Icon } from './icons'
 
-const ROLE_TITLE = { needs: 'Нужды', wants: 'Желания', savings: 'Сбережения' } as const
-
 export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistribute: (t: Tx) => void; onOpenOps: (f: OpsFilter) => void }) {
   const [month, setMonth] = useState(monthOf(todayISO()))
   const [pay, setPay] = useState<Recurring | null>(null)
   const [limitFor, setLimitFor] = useState<Category | null>(null)
 
-  const buckets = bucketStates(data, month, data.settings)
   const envs = envelopes(data.categories, data.limits, data.txs, month)
     .filter(e => e.limit || e.spent || !e.category.system)
-  const income = planIncome(data.txs, month, data.settings)
   const plan = envs.reduce((s, e) => s + e.limit, 0)
   const fact = envs.reduce((s, e) => s + e.spent, 0)
   const allocated = new Set(data.allocations.map(a => a.txId))
   const pending = data.txs.filter(t => t.type === 'income' && monthOf(t.date) === month && !allocated.has(t.id!))
-  const noExpected = !data.settings.expectedSalary && !data.settings.expectedAdvance
   const active = data.recurring.filter(r => r.active)
   const payments = active.filter(r => r.kind !== 'topup').sort((a, b) => a.day - b.day)
   const topups = active.filter(r => r.kind === 'topup')
@@ -74,27 +69,6 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
             <p className="hint" style={{ marginBottom: 0 }}>Лимиты не заданы — нажми на категорию ниже, чтобы задать.</p>
           </>
         )}
-      </div>
-
-      <div className="card">
-        <div className="rule-head">
-          <h3>Рекомендация {data.settings.rule.needs}/{data.settings.rule.wants}/{data.settings.rule.savings}</h3>
-          <div className="muted small sub">от дохода <Money v={income} /></div>
-        </div>
-        {noExpected && <p className="hint">Укажи ожидаемые зарплату и аванс в «Ещё → Выплаты», чтобы план был виден с начала месяца.</p>}
-        {BUCKETS.map(b => {
-          const s = buckets[b]
-          return (
-            <div key={b} className="rule-row">
-              <div className="line small">
-                <span><strong>{ROLE_TITLE[b]}</strong> <span className="muted">{data.settings.rule[b]}%</span></span>
-                <strong className="num"><Money v={s.spent} /></strong>
-              </div>
-              <Bar value={Math.max(0, s.spent)} max={s.target} color={`var(--${b})`} />
-              <div className="rec muted num">рекомендуется <Money v={s.target} /></div>
-            </div>
-          )
-        })}
       </div>
 
       <div className="section-title stack"><h3>Категории</h3><span className="muted small">нажми — лимит, <Icon name="list" size={13} /> — операции</span></div>

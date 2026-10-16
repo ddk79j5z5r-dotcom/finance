@@ -64,7 +64,7 @@ export function CategoryPicker({ data, roots, rootId, subId, onPick, open, setOp
             <div className="tile-grid">
               {roots.map(c => (
                 <button key={c.id} type="button" className={c.id === rootId ? 'tile-btn on' : 'tile-btn'} onClick={() => pickRoot(c)}>
-                  <span className="badge tone-needs"><Icon name={categoryIcon(c)} size={22} /></span>
+                  <Badge icon={categoryIcon(c)} size={50} />
                   <span className="tile-label">{c.name}{childrenOf(data.categories, c.id!).length > 0 && ' ›'}</span>
                 </button>
               ))}
@@ -89,7 +89,7 @@ export function IncomeKindPicker({ value, onPick }: { value: IncomeKind; onPick:
           <div className="tile-grid">
             {KINDS.map(k => (
               <button key={k} type="button" className={k === value ? 'tile-btn on' : 'tile-btn'} onClick={() => { onPick(k); setOpen(false) }}>
-                <span className="badge tone-income"><Icon name={INCOME_ICON[k]} size={22} /></span>
+                <Badge icon={INCOME_ICON[k]} tone="income" size={50} />
                 <span className="tile-label">{INCOME_LABEL[k]}</span>
               </button>
             ))}

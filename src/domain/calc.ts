@@ -1,7 +1,7 @@
 import type { Trade } from './bonds'
 import { monthOf, shiftMonth } from './money'
-import type { Account, AccountColor, AccountKind, Bucket, Category, Goal, IncomeKind, Limit, Recurring, Settings, Tx } from './types'
-import { ACCOUNT_COLORS, BUCKETS, REGULAR_INCOME } from './types'
+import type { Account, AccountColor, AccountKind, Category, Goal, IncomeKind, Limit, Recurring, Settings, Tx } from './types'
+import { ACCOUNT_COLORS, REGULAR_INCOME } from './types'
 
 // ---------- Балансы ----------
 
@@ -82,217 +82,54 @@ export function envelopes(categories: Category[], limits: Limit[], txs: Tx[], mo
   })
 }
 
-// ---------- Месячный план 50/30/20 ----------
-
-/** Доход, на который считается правило: фактический регулярный + ожидаемые, но ещё не пришедшие зарплата/аванс. */
-/** База правила: весь доход месяца + ожидаемые, но ещё не пришедшие зарплата и аванс. */
-export function planIncome(txs: Tx[], month: string, settings: Settings): number {
-  const monthTx = txs.filter(t => t.type === 'income' && monthOf(t.date) === month)
-  let total = monthTx.reduce((s, t) => s + t.rub, 0)
-  if (!monthTx.some(t => t.incomeKind === 'salary')) total += settings.expectedSalary
-  if (!monthTx.some(t => t.incomeKind === 'advance')) total += settings.expectedAdvance
-  return total
-}
-
-export function bucketTargets(income: number, settings: Settings): Record<Bucket, number> {
-  const r = settings.rule
-  const needs = Math.round((income * r.needs) / 100)
-  const wants = Math.round((income * r.wants) / 100)
-  return { needs, wants, savings: Math.round((income * r.savings) / 100) }
-}
-
-export interface BucketState {
-  target: number // рекомендация: доля базы
-  spent: number // факт: желания/сбережения — ушло на счета этой роли; нужды — осталось на картах
-}
-
-/** Счёт учитывается в 50/30/20 как сбережения: явный флажок, иначе — если на нём есть цель. */
-/**
- * Роль счёта в 50/30/20. Карта — нужды (деньги на жизнь), брокерский — сбережения,
- * копилка — как выбрано; для старых данных: флажок «Сбережения» или наличие цели → сбережения.
- */
-export function accountRole(a: Account, goals: Goal[]): Bucket {
-  if (accountKind(a) === 'card') return 'needs'
-  if (a.role) return a.role
-  if (accountKind(a) === 'broker') return 'savings'
-  if (a.savings != null) return a.savings ? 'savings' : 'needs'
-  return goals.some(g => g.accountId === a.id) ? 'savings' : 'needs'
-}
-
-export function isSavingsAccount(a: Account, goals: Goal[]): boolean {
-  return accountRole(a, goals) === 'savings'
-}
-
-/**
- * Сколько за месяц ушло на счета с ролью «желания» и «сбережения» (₽): переводы на них с других
- * ролей минус переводы с них обратно, плюс доходы, пришедшие прямо на них (проценты, купоны).
- * Перекладывание между счетами одной роли (карта → «Квартплата») не учитывается.
- */
-export function roleFlows(txs: Tx[], accounts: Account[], goals: Goal[], month: string): { wants: number; savings: number } {
-  const role = new Map(accounts.map(a => [a.id!, accountRole(a, goals)]))
-  const res = { wants: 0, savings: 0 }
-  const add = (r: Bucket | undefined, v: number) => { if (r === 'wants' || r === 'savings') res[r] += v }
-  for (const t of txs) {
-    if (monthOf(t.date) !== month) continue
-    if (t.type === 'transfer') {
-      const from = role.get(t.accountId), to = role.get(t.toAccountId!)
-      if (from === to) continue
-      add(to, t.toRub ?? t.rub)
-      add(from, -t.rub)
-    } else if (t.type === 'income') add(role.get(t.accountId), t.rub)
-  }
-  return res
-}
-
-/** Отложено за месяц — на счета с ролью «сбережения». */
-export function savedInMonth(txs: Tx[], accounts: Account[], goals: Goal[], month: string): number {
-  return roleFlows(txs, accounts, goals, month).savings
-}
-
-/** Тип траты: по самой категории операции (у подкатегории может быть свой тип, отличный от родителя). */
-export function bucketOf(categories: Category[], id: number | null | undefined): Bucket | undefined {
-  return categories.find(c => c.id === id)?.bucket ?? rootOf(categories, id)?.bucket
-}
-
-/** Траты месяца по типам (₽) с учётом типа подкатегорий; разница курса — по типу своей служебной категории. */
-export function spentByBucket(categories: Category[], txs: Tx[], month: string): Record<Bucket, number> {
-  const res = { needs: 0, wants: 0, savings: 0 }
-  const fx = categories.find(c => c.system === 'fx')
-  for (const t of txs) {
-    if (monthOf(t.date) !== month) continue
-    if (t.type === 'expense') {
-      const b = bucketOf(categories, t.categoryId)
-      if (b) res[b] += t.rub
-    } else if (t.type === 'transfer' && fx) res[fx.bucket] += fxLoss(t)
-  }
-  return res
-}
-
-/**
- * 50/30/20 по счетам. Рекомендация — доля базы (весь доход месяца). Факт:
- * желания и сбережения — сколько ушло на счета этих ролей; нужды — что из пришедшего осталось
- * на картах и счетах-нуждах (на жизнь и обязательные платежи).
- */
-export function bucketStates(
-  data: { txs: Tx[]; goals: Goal[]; accounts: Account[] },
-  month: string,
-  settings: Settings,
-): Record<Bucket, BucketState> {
-  const targets = bucketTargets(planIncome(data.txs, month, settings), settings)
-  const flows = roleFlows(data.txs, data.accounts, data.goals, month)
-  const income = monthTotals(data.txs, month).income
-  return {
-    needs: { target: targets.needs, spent: income - flows.wants - flows.savings },
-    wants: { target: targets.wants, spent: flows.wants },
-    savings: { target: targets.savings, spent: flows.savings },
-  }
-}
-
-// ---------- Распределение поступления (рекомендация) ----------
-
-const isBefore = (a: Tx, b: Tx) =>
-  a.date < b.date || (a.date === b.date && (a.createdAt < b.createdAt || (a.createdAt === b.createdAt && (a.id ?? 0) < (b.id ?? 0))))
+// ---------- Рекомендация при поступлении ----------
 
 export interface Reserve {
   recurring: Recurring
   rub: number
-  bucket: Bucket
 }
 
 export interface Distribution {
   income: number
+  /** Отложить на регулярные платежи и пополнения, привязанные к этой выплате. */
   reserves: Reserve[]
-  split: Record<Bucket, number> // без учёта резервов; резервы уже входят в нужды
-  goalSuggestions: { goal: Goal; rub: number }[]
-}
-
-function splitByWeights(total: number, weights: Record<Bucket, number>): Record<Bucket, number> {
-  const sum = BUCKETS.reduce((s, b) => s + weights[b], 0)
-  const res = { needs: 0, wants: 0, savings: 0 }
-  if (total <= 0 || sum <= 0) return res
-  let rest = total
-  for (const b of BUCKETS.slice(0, -1)) {
-    res[b] = Math.floor((total * weights[b]) / sum)
-    rest -= res[b]
-  }
-  res.savings = rest
-  return res
+  /** Отложить на цели. */
+  goals: { goal: Goal; rub: number }[]
+  /** Остаётся свободным. */
+  free: number
 }
 
 /**
- * Предложение, как разложить поступление.
- * Регулярный доход: сначала резервы на привязанные к этой выплате регулярные платежи,
- * остаток — так, чтобы месяц в целом пришёл к 50/30/20 (с учётом уже распределённого).
- * Нерегулярный (от родителей, другое): по умолчанию всё в сбережения.
+ * Что сделать с поступлением. Зарплата и аванс: сначала резервы на привязанные к выплате платежи
+ * и пополнения копилок, затем месячный план целей со сроком, остальное свободно.
+ * Нерегулярные деньги (премия, от родителей, проценты) — на цели по приоритету.
  */
 export function suggestDistribution(
   tx: Tx,
   /** goalRemainingRub — сколько рублей осталось до каждой цели; goalMonthLeftRub — сколько ещё нужно в этом месяце целям со сроком. */
-  data: {
-    txs: Tx[]; recurring: Recurring[]; goals: Goal[]; categories?: Category[]; accounts?: Account[]
-    goalRemainingRub: Map<number, number>; goalMonthLeftRub?: Map<number, number>
-  },
-  settings: Settings,
+  data: { recurring: Recurring[]; goals: Goal[]; goalRemainingRub: Map<number, number>; goalMonthLeftRub?: Map<number, number> },
   recurringToRub: (r: Recurring) => number,
 ): Distribution {
-  const month = monthOf(tx.date)
   const kind = tx.incomeKind as IncomeKind
   const income = tx.rub
-  let split: Record<Bucket, number>
-  let reserves: Reserve[] = []
-  // Рекомендация — на момент прихода денег: более поздние поступления её не меняют.
-  const asOf = data.txs.filter(t => t.type !== 'income' || t === tx || (tx.id != null && t.id === tx.id) || isBefore(t, tx))
-
-  if (REGULAR_INCOME.includes(kind)) {
-    reserves = data.recurring
+  const regular = REGULAR_INCOME.includes(kind)
+  const reserves: Reserve[] = regular
+    ? data.recurring
       .filter(r => r.active && (r.fundFrom === kind || r.fundFrom === 'both'))
-      .map(r => {
-        const full = recurringToRub(r)
-        const acc = data.accounts?.find(a => a.id === r.reserveAccountId)
-        // Платёж — нужда; пополнение копилки — по роли этой копилки.
-        const bucket: Bucket = r.kind === 'topup' && acc ? accountRole(acc, data.goals) : 'needs'
-        return { recurring: r, rub: r.fundFrom === 'both' ? Math.round(full / 2) : full, bucket }
-      })
-    const reservedBy = { needs: 0, wants: 0, savings: 0 }
-    for (const r of reserves) reservedBy[r.bucket] += r.rub
-    const reserved = reserves.reduce((s, r) => s + r.rub, 0)
-    const free = Math.max(0, income - reserved)
-
-    const targets = bucketTargets(planIncome(asOf, month, settings), settings)
-    // Что уже «разложено» предыдущими выплатами месяца — по той же формуле, без сохранённых записей.
-    const already = { needs: 0, wants: 0, savings: 0 }
-    const earlier = asOf.filter(t => t.type === 'income' && monthOf(t.date) === month && t !== tx
-      && REGULAR_INCOME.includes(t.incomeKind!) && isBefore(t, tx))
-    for (const e of earlier) {
-      const prior = allocationOf(suggestDistribution(e, { ...data, txs: asOf }, settings, recurringToRub))
-      for (const b of BUCKETS) already[b] += prior[b]
-    }
-    const gap = {
-      needs: Math.max(0, targets.needs - already.needs - reservedBy.needs),
-      wants: Math.max(0, targets.wants - already.wants - reservedBy.wants),
-      savings: Math.max(0, targets.savings - already.savings - reservedBy.savings),
-    }
-    const gapTotal = gap.needs + gap.wants + gap.savings
-    split = splitByWeights(Math.min(free, gapTotal), gap)
-    // Если поступление больше, чем осталось добрать до плана, излишек — по правилу.
-    const extra = splitByWeights(free - Math.min(free, gapTotal), settings.rule)
-    for (const b of BUCKETS) split[b] += extra[b]
-  } else {
-    split = { needs: 0, wants: 0, savings: income }
-  }
-
-  return { income, reserves, split, goalSuggestions: suggestGoals(split.savings, data.goals, data.goalRemainingRub, data.goalMonthLeftRub) }
+      .map(r => { const full = recurringToRub(r); return { recurring: r, rub: r.fundFrom === 'both' ? Math.round(full / 2) : full } })
+    : []
+  const left = Math.max(0, income - reserves.reduce((s, r) => s + r.rub, 0))
+  const goals = suggestGoals(left, data.goals, data.goalRemainingRub, data.goalMonthLeftRub, regular)
+  return { income, reserves, goals, free: left - goals.reduce((s, g) => s + g.rub, 0) }
 }
 
-/**
- * Раскладывает сумму сбережений по целям: сначала целям со сроком — сколько им ещё нужно в этом месяце,
- * затем остаток по всем незакрытым целям в порядке приоритета.
- */
 export function suggestGoals(
   savings: number,
   goals: Goal[],
   remainingRub: Map<number, number>,
   monthLeftRub: Map<number, number> = new Map(),
+  /** Только месячный план целей со сроком (для зарплаты и аванса). */
+  deadlinesOnly = false,
 ): { goal: Goal; rub: number }[] {
   const given = new Map<number, number>()
   let left = savings
@@ -303,7 +140,7 @@ export function suggestGoals(
     if (rub > 0) { given.set(g.id!, (given.get(g.id!) ?? 0) + rub); left -= rub }
   }
   for (const g of sorted) if (g.deadline) give(g, monthLeftRub.get(g.id!) ?? 0)
-  for (const g of sorted) give(g, Infinity)
+  if (!deadlinesOnly) for (const g of sorted) give(g, Infinity)
   return sorted.filter(g => given.has(g.id!)).map(g => ({ goal: g, rub: given.get(g.id!)! }))
 }
 
@@ -326,13 +163,6 @@ export function goalProgress(goals: Goal[], bal: Map<number, number>): GoalProgr
       left.set(goal.accountId, avail - saved)
       return { goal, saved, remaining: goal.target - saved }
     })
-}
-
-/** Что сохраняется при принятии распределения: резервы входят в нужды. */
-export function allocationOf(d: Distribution, split = d.split): Record<Bucket, number> {
-  const res = { ...split }
-  for (const r of d.reserves) res[r.bucket] += r.rub
-  return res
 }
 
 // ---------- Главная, календарь, аналитика ----------
@@ -508,29 +338,6 @@ export function capitalByMonth(accounts: Account[], txs: Tx[], months: string[],
   return months.map(m => opening + netChangeSince(txs.filter(t => monthOf(t.date) <= m), '0000-00-00'))
 }
 
-// ---------- Переводы по копилкам при распределении ----------
-
-export interface PlannedTransfer {
-  accountId: number
-  rub: number
-  reasons: string[]
-}
-
-/** Куда разложить поступление по счетам-копилкам: резервы под платежи и подсказки по целям. */
-export function transfersFor(d: Distribution, fromAccountId: number): PlannedTransfer[] {
-  const map = new Map<number, PlannedTransfer>()
-  const add = (accountId: number | null | undefined, rub: number, reason: string) => {
-    if (accountId == null || accountId === fromAccountId || rub <= 0) return
-    const cur = map.get(accountId) ?? { accountId, rub: 0, reasons: [] }
-    cur.rub += rub
-    cur.reasons.push(reason)
-    map.set(accountId, cur)
-  }
-  for (const r of d.reserves) add(r.recurring.reserveAccountId, r.rub, r.recurring.name)
-  for (const g of d.goalSuggestions) add(g.goal.accountId, g.rub, g.goal.name)
-  return [...map.values()]
-}
-
 // ---------- Порядок счетов при вводе ----------
 
 const CARD_NAME = /банк|карт|сбер|тинькофф|т-банк|псб|альфа|втб|газпром|райф|озон|яндекс|мтс|налич|кошел|visa|mastercard/i
@@ -619,7 +426,7 @@ export function accountColor(a: Account, all: Account[]): AccountColor {
 
 // ---------- Первая настройка ----------
 
-export type SetupStep = 'pay' | 'recurring' | 'goals' | 'roles' | 'security' | 'backup'
+export type SetupStep = 'pay' | 'recurring' | 'goals' | 'security' | 'backup'
 
 export function setupSteps(
   d: { settings: Settings; recurring: Recurring[]; goals: Goal[]; accounts?: Account[] },
@@ -630,7 +437,6 @@ export function setupSteps(
     { id: 'pay', label: 'Ожидаемые зарплата и аванс', done: d.settings.expectedSalary > 0 && d.settings.expectedAdvance > 0 },
     { id: 'recurring', label: 'Регулярные платежи с копилками', done: active.length > 0 && active.every(r => r.reserveAccountId != null) },
     { id: 'goals', label: 'Цели на копилках', done: d.goals.length > 0 },
-    { id: 'roles', label: 'Роли копилок в 50/30/20', done: (d.accounts ?? []).filter(a => !a.archived && accountKind(a) === 'savings').every(a => !!a.role) },
     { id: 'security', label: 'Face ID или PIN', done: lockEnabled },
     { id: 'backup', label: 'Первый бэкап в Excel', done: d.settings.lastExportAt != null },
   ]

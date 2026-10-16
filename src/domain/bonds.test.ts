@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { balances, savedInMonth } from './calc'
+import { balances } from './calc'
 import { bondEvents, fetchBond, pendingBondEvents, positions, qtyAt, searchBonds, type Bond, type Trade } from './bonds'
 import type { Account, Tx } from './types'
 
@@ -108,23 +108,5 @@ describe('купоны и погашения', () => {
     const recorded: Tx = { date: '2026-10-15', type: 'income', incomeKind: 'interest', accountId: 9, amount: 1, rub: 1, comment: '', createdAt: 0, eventKey: '9|SU1|coupon|2026-10-15' }
     expect(pendingBondEvents(trades, [bond], [], [], '2027-01-20', none).map(e => e.date)).toEqual(['2026-10-15', '2027-01-15'])
     expect(pendingBondEvents(trades, [bond], [recorded], [{ key: '9|SU1|coupon|2027-01-15', status: 'dismissed' }], '2027-01-20', none)).toEqual([])
-  })
-})
-
-describe('сбережения через счета', () => {
-  const accs: Account[] = [
-    { id: 1, name: 'Карта', currency: 'RUB', openingBalance: 0, archived: false, order: 0 },
-    { id: 9, name: 'Брокер', currency: 'RUB', openingBalance: 0, archived: false, order: 1, savings: true },
-    { id: 4, name: 'Квартира', currency: 'RUB', openingBalance: 0, archived: false, order: 2, savings: false },
-  ]
-  const t = (p: Partial<Tx>): Tx => ({ date: '2026-10-05', type: 'transfer', accountId: 1, amount: 0, rub: 0, comment: '', createdAt: 0, ...p })
-  it('переводы на сберегательный счёт и купоны на нём — сбережения; копилка под платёж — нет', () => {
-    const txs = [
-      t({ toAccountId: 9, amount: R(20000), rub: R(20000), toAmount: R(20000), toRub: R(20000) }),
-      t({ toAccountId: 4, amount: R(30000), rub: R(30000), toAmount: R(30000), toRub: R(30000) }),
-      t({ accountId: 9, toAccountId: 1, amount: R(5000), rub: R(5000), toAmount: R(5000), toRub: R(5000) }),
-      t({ type: 'income', incomeKind: 'interest', accountId: 9, amount: R(348), rub: R(348) }),
-    ]
-    expect(savedInMonth(txs, accs, [], '2026-10')).toBe(R(20000 - 5000 + 348))
   })
 })

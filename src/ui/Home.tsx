@@ -1,4 +1,4 @@
-import { bucketStates, monthForecast, monthTotals, netChangeSince, upcoming, type PlannedEvent } from '../domain/calc'
+import { monthForecast, monthTotals, netChangeSince, upcoming, type PlannedEvent } from '../domain/calc'
 import { saveSettings } from '../db'
 import { bondEvents, type BondEvent } from '../domain/bonds'
 import { BondEventSheet } from './Bonds'
@@ -52,7 +52,6 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
     && (!data.settings.lastExportAt || Date.now() - data.settings.lastExportAt > WEEK)
     && (!data.settings.backupNudgeAt || Date.now() - data.settings.backupNudgeAt > WEEK)
   const forecast = monthForecast(data, data.settings, today, r => data.toRub(r.amount, r.currency) ?? r.amount)
-  const buckets = bucketStates(data, month, data.settings)
 
   return (
     <div className="page air">
@@ -116,11 +115,6 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
               {forecast.balance < 0 ? 'Месяц уходит в минус' : 'К концу месяца останется'}{' '}
               <strong className={forecast.balance < 0 ? 'neg' : ''}>≈ <Money v={forecast.balance} /></strong>
             </span>
-            <span className="rule-line">
-              <span><i className="tone-dot-inline tone-needs" />Нужды <Money v={buckets.needs.spent} /> / <Money v={buckets.needs.target} /></span>
-              <span><i className="tone-dot-inline tone-wants" />Желания <Money v={buckets.wants.spent} /> / <Money v={buckets.wants.target} /></span>
-              <span><i className="tone-dot-inline tone-savings" />Сбережения <Money v={buckets.savings.spent} /> / <Money v={buckets.savings.target} /></span>
-            </span>
           </button>
         )}
       </div>
@@ -137,9 +131,8 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
   )
 }
 
-function Lead({ icon, tone, thin }: { icon: IconName; tone: Bucket | 'income' | 'transfer' | 'coupon'; thin?: boolean }) {
-  if (!thin) return <Badge icon={icon} tone={tone} />
-  return <span className="thin-ico"><Icon name={icon} size={22} stroke={1.6} /><i className={`tone-dot tone-${tone}`} /></span>
+function Lead({ icon, tone }: { icon: IconName; tone: Bucket | 'income' | 'transfer' | 'coupon'; thin?: boolean }) {
+  return <Badge icon={icon} tone={tone} size={40} />
 }
 
 export function BondEventRow({ e, today, thin }: { e: BondEvent; today: string; thin?: boolean }) {

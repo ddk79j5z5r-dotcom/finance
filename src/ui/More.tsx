@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { db, saveSettings } from '../db'
 import { refreshLatestRate } from '../domain/rates'
-import { BUCKET_LABEL, BUCKETS, CURRENCIES, type Category, type Currency, type Recurring } from '../domain/types'
+import { CURRENCIES, type Category, type Currency, type Recurring } from '../domain/types'
 import { disableLock, enrollFaceId, faceIdSupported, getLock, isLockEnabled, setPin } from '../lock'
 import { AmountInput, Bar, Chips, CUR_SUFFIX, fromInput, Money, Sheet, toInput, useOnce } from './common'
 import { setupSteps } from '../domain/calc'
@@ -10,7 +10,7 @@ import { Icon, type IconName } from './icons'
 import { ImportCk } from './ImportCk'
 import { notify } from './undo'
 
-export type MoreSection = 'rule' | 'pay' | 'categories' | 'recurring' | 'security' | 'backup' | 'reminders' | 'coinkeeper'
+export type MoreSection = 'pay' | 'categories' | 'recurring' | 'security' | 'backup' | 'reminders' | 'coinkeeper'
 export type MorePage = 'calendar' | 'analytics' | 'accounts'
 
 const PAGES: { id: MorePage; label: string; sub: string; icon: IconName }[] = [
@@ -23,7 +23,6 @@ const SECTIONS: { id: MoreSection; label: string; icon: IconName }[] = [
   { id: 'backup', label: 'Бэкап и Excel', icon: 'download' },
   { id: 'coinkeeper', label: 'Импорт из CoinKeeper', icon: 'upload' },
   { id: 'pay', label: 'Выплаты', icon: 'banknote' },
-  { id: 'rule', label: 'Правило распределения', icon: 'sliders' },
   { id: 'recurring', label: 'Регулярные платежи', icon: 'repeat' },
   { id: 'categories', label: 'Категории', icon: 'tag' },
   { id: 'security', label: 'Face ID и PIN', icon: 'lock' },
@@ -49,7 +48,7 @@ export function More({ data, section, setSection, onOpenPage }: {
           <Bar value={stepsDone} max={steps.length} color="var(--accent)" />
           {steps.map(st => (
             <button key={st.id} className={`setup-step ${st.done ? 'done' : ''}`} disabled={st.done}
-              onClick={() => (st.id === 'goals' || st.id === 'roles' ? onOpenPage('accounts') : setSection(st.id))}>
+              onClick={() => (st.id === 'goals' ? onOpenPage('accounts') : setSection(st.id))}>
               <span className="check-circle">{st.done && <Icon name="check" size={14} />}</span>
               <span className="body">{st.label}</span>
               {!st.done && <Icon name="right" size={16} />}
@@ -94,7 +93,6 @@ export function More({ data, section, setSection, onOpenPage }: {
 
       {section && (
         <Sheet title={SECTIONS.find(s => s.id === section)!.label} onClose={() => setSection(null)}>
-          {section === 'rule' && <RuleSection data={data} onDone={() => setSection(null)} />}
           {section === 'pay' && <PaySection data={data} onDone={() => setSection(null)} />}
           {section === 'categories' && <CategoriesSection data={data} />}
           {section === 'recurring' && <RecurringSection data={data} />}
@@ -105,24 +103,6 @@ export function More({ data, section, setSection, onOpenPage }: {
         </Sheet>
       )}
     </div>
-  )
-}
-
-function RuleSection({ data, onDone }: { data: Data; onDone: () => void }) {
-  const [rule, setRule] = useState(data.settings.rule)
-  const sum = rule.needs + rule.wants + rule.savings
-  return (
-    <>
-      {BUCKETS.map(b => (
-        <div className="line input-line" key={b}>
-          <span>{BUCKET_LABEL[b]}</span>
-          <div className="amount"><input inputMode="numeric" value={rule[b]} onChange={e => setRule(r => ({ ...r, [b]: Number(e.target.value.replace(/\D/g, '')) || 0 }))} /><span className="suffix">%</span></div>
-        </div>
-      ))}
-      {sum !== 100 && <p className="error">Сумма должна быть 100%, сейчас {sum}%</p>}
-      <p className="hint">Считается на весь месяц: зарплата + аванс + премия. Переводы от родителей не входят.</p>
-      <button className="save" disabled={sum !== 100} onClick={async () => { await saveSettings({ rule }); onDone() }}>Сохранить</button>
-    </>
   )
 }
 
@@ -143,7 +123,7 @@ function PaySection({ data, onDone }: { data: Data; onDone: () => void }) {
       <AmountInput value={salary} onChange={setSalary} suffix="₽" />
       <label className="field-label">Ожидаемый аванс</label>
       <AmountInput value={advance} onChange={setAdvance} suffix="₽" />
-      <p className="hint">Нужно, чтобы план 50/30/20 был виден с начала месяца. Когда выплата придёт, в расчёт пойдёт фактическая сумма. Премию заранее не планируем.</p>
+      <p className="hint">Нужно для прогноза на месяц и календаря. Когда выплата придёт, в расчёт пойдёт фактическая сумма.</p>
       <button className="save" onClick={async () => {
         await saveSettings({ salaryDay: day(salaryDay), advanceDay: day(advanceDay), expectedSalary: fromInput(salary) ?? 0, expectedAdvance: fromInput(advance) ?? 0 })
         onDone()
@@ -318,7 +298,6 @@ function RecurringForm({ data, r, onDone }: { data: Data; r: Partial<Recurring>;
         <option value="" disabled>Выбери</option>
         {cats.sort((a, b) => label(a).localeCompare(label(b))).map(c => <option key={c.id} value={c.id}>{label(c)}</option>)}
       </select>
-      {isTopup && <p className="hint">По типу этой категории пополнение учитывается в 50/30/20 (нужды или желания).</p>}
       <label className="field-label">{isTopup ? 'Откладывать из' : 'Резервировать из'}</label>
       <Chips options={[
         { value: 'salary' as const, label: `Зарплаты (${data.settings.salaryDay}-го)` },
