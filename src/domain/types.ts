@@ -49,6 +49,8 @@ export interface Category {
   system?: 'fx'
   /** Счёт, который подставляется при выборе этой категории. */
   accountId?: number | null
+  /** Иконка, выбранная вручную (иначе подбирается по названию). */
+  icon?: string
 }
 
 export interface Tx {

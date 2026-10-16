@@ -424,7 +424,7 @@ function Podium({ items }: { items: { category: Category; value: number; label: 
     <div className="an-podium">
       {sorted.map(i => (
         <div className="col" key={i.category.id}>
-          <div className="bar" style={{ height: 80 + (i.value / max) * 110 }}>
+          <div className="pod" style={{ height: 80 + (i.value / max) * 110 }}>
             <Badge icon={categoryIcon(i.category)} size={44} />
             <span className="v">{i.label}</span>
           </div>

@@ -6,7 +6,7 @@ import { disableLock, enrollFaceId, faceIdSupported, getLock, isLockEnabled, set
 import { AmountInput, Bar, Chips, CUR_SUFFIX, fromInput, Money, Sheet, toInput, useOnce } from './common'
 import { setupSteps } from '../domain/calc'
 import { childrenOf, rateHint, rootCategories, type Data } from './data'
-import { Icon, type IconName } from './icons'
+import { Badge, CATEGORY_ICONS, categoryIcon, Icon, type IconName } from './icons'
 import { ImportCk } from './ImportCk'
 import { notify } from './undo'
 
@@ -146,7 +146,8 @@ function CategoriesSection({ data }: { data: Data }) {
             {roots.map(c => (
               <div key={c.id}>
                 <button className="row" onClick={() => setEdit(c)}>
-                  <span>{c.name}{accName(c.accountId) && <span className="muted small"> · {accName(c.accountId)}</span>}</span><span className="muted">›</span>
+                  <Badge icon={categoryIcon(c)} size={36} />
+                  <span className="body">{c.name}{accName(c.accountId) && <span className="muted small"> · {accName(c.accountId)}</span>}</span><span className="muted">›</span>
                 </button>
                 {childrenOf(data.categories, c.id!).map(s => (
                   <button className="row" style={{ paddingLeft: 20 }} key={s.id} onClick={() => setEdit(s)}>
@@ -167,10 +168,13 @@ function CategoriesSection({ data }: { data: Data }) {
 function CategoryForm({ data, cat, onDone }: { data: Data; cat: Partial<Category>; onDone: () => void }) {
   const [name, setName] = useState(cat.name ?? '')
   const [accountId, setAccountId] = useState<number | null>(cat.accountId ?? null)
+  const [icon, setIcon] = useState<string | undefined>(cat.icon)
   const isSub = cat.parentId != null
+  // Пока иконка не выбрана — подбирается по названию на лету.
+  const shown = categoryIcon({ ...(cat as Category), name, icon })
   const save = useOnce(async () => {
     if (!name.trim()) return
-    await db.categories.put({ ...(cat as Category), name: name.trim(), bucket: cat.bucket ?? 'needs', accountId, parentId: cat.parentId ?? null, archived: cat.archived ?? false })
+    await db.categories.put({ ...(cat as Category), name: name.trim(), icon, bucket: cat.bucket ?? 'needs', accountId, parentId: cat.parentId ?? null, archived: cat.archived ?? false })
     onDone()
   })
   const archive = useOnce(async () => {
@@ -182,6 +186,18 @@ function CategoryForm({ data, cat, onDone }: { data: Data; cat: Partial<Category
     <>
       <label className="field-label">Название</label>
       <input value={name} onChange={e => setName(e.target.value)} autoFocus={!cat.id} />
+      {!isSub && (
+        <>
+          <label className="field-label">Иконка {!icon && <span className="muted">· подобрана по названию</span>}</label>
+          <div className="tile-grid icon-grid">
+            {CATEGORY_ICONS.map(i => (
+              <button key={i} type="button" className={i === shown ? 'tile-btn on' : 'tile-btn'} aria-label={i} aria-pressed={i === shown} onClick={() => setIcon(i)}>
+                <Badge icon={i} size={44} />
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       <label className="field-label">Счёт по умолчанию</label>
       <select value={accountId ?? ''} onChange={e => setAccountId(e.target.value ? Number(e.target.value) : null)}>
         <option value="">{isSub ? 'Как у родительской категории' : 'Основной счёт'}</option>
