@@ -80,7 +80,7 @@ export function AddBondSheet({ data, accountId, onClose }: { data: Data; account
           <div className="card tight" style={{ marginTop: 12 }}>
             {results.map(r => (
               <button key={r.secid} className="row" onClick={() => pick(r)}>
-                <span className="body"><span className="title">{r.shortName}</span><span className="sub">{r.isin}</span></span>
+                <span className="body"><span className="title">{r.shortName}</span><span className="sub">{r.secid}{r.isin && r.isin !== r.secid ? ` · ISIN ${r.isin}` : ''}</span></span>
                 <Icon name="right" size={18} />
               </button>
             ))}
@@ -93,29 +93,35 @@ export function AddBondSheet({ data, accountId, onClose }: { data: Data; account
   )
 }
 
-/** Сделка: покупка или продажа. Сумма = количество × номинал × цена% + НКД ± комиссия. */
+/**
+ * Сделка: покупка или продажа — поля как в отчёте брокера: цена в рублях за штуку и НКД за всю сделку.
+ * Сумма = количество × цена + НКД ± комиссия (комиссия у брокера — отдельной строкой).
+ */
 export function TradeForm({ data, accountId, bond, type, onDone }: { data: Data; accountId: number; bond: Bond; type: 'buy' | 'sell'; onDone: () => void }) {
   const [date, setDate] = useState(todayISO())
   const [qty, setQty] = useState('')
-  const [price, setPrice] = useState(bond.price != null ? String(bond.price).replace('.', ',') : '')
-  const [nkd, setNkd] = useState(toInput(bond.accrued))
+  const [price, setPrice] = useState(bond.price != null ? String(Math.round(bond.price * bond.face) / 10000).replace('.', ',') : '')
+  // Пока НКД не трогали — подставляется биржевой НКД × количество.
+  const [nkd, setNkd] = useState<string | null>(null)
   const [fee, setFee] = useState('')
   const [error, setError] = useState('')
   const owned = data.bondPositions.find(p => p.accountId === accountId && p.secid === bond.secid)?.qty ?? 0
 
   const n = Math.max(0, Math.floor(Number(qty) || 0))
-  const p = Number(price.replace(',', '.')) || 0
-  const nkdPer = fromInput(nkd) ?? 0
+  const priceRub = Number(price.replace(/\s/g, '').replace(',', '.')) || 0
+  const nkdTotal = nkd == null ? n * bond.accrued : fromInput(nkd) ?? 0
   const feeK = fromInput(fee) ?? 0
-  const body = Math.round(n * bond.face * p / 100)
-  const amount = type === 'buy' ? body + n * nkdPer + feeK : body + n * nkdPer - feeK
+  const body = Math.round(n * priceRub * 100)
+  const deal = body + nkdTotal
+  const amount = type === 'buy' ? deal + feeK : deal - feeK
   const cash = data.bal.get(accountId) ?? 0
 
   const save = useOnce(async () => {
     if (!n) return setError('Укажи количество')
-    if (!p) return setError('Укажи цену')
+    if (!priceRub) return setError('Укажи цену')
     if (type === 'sell' && n > owned) return setError(`На счёте только ${owned} шт.`)
-    const trade: Trade = { accountId, secid: bond.secid, date, type, qty: n, price: p, nkd: n * nkdPer, fee: feeK, amount }
+    const percent = (priceRub * 100 * 100) / bond.face // % номинала
+    const trade: Trade = { accountId, secid: bond.secid, date, type, qty: n, price: percent, nkd: nkdTotal, fee: feeK, amount }
     await db.bonds.put(bond)
     await db.trades.add(trade)
     notify(type === 'buy' ? 'Покупка записана' : 'Продажа записана')
@@ -126,17 +132,21 @@ export function TradeForm({ data, accountId, bond, type, onDone }: { data: Data;
     <>
       <div className="row2">
         <div><label className="field-label">Количество, шт.</label><input inputMode="numeric" value={qty} onChange={e => setQty(e.target.value.replace(/\D/g, ''))} autoFocus placeholder={type === 'sell' ? `до ${owned}` : '10'} /></div>
-        <div><label className="field-label">Цена, % номинала</label><input inputMode="decimal" value={price} onChange={e => setPrice(e.target.value.replace(/[^\d.,]/g, ''))} /></div>
+        <div><label className="field-label">Цена за 1 шт.</label><div className="amount"><input inputMode="decimal" autoComplete="off" value={price} onChange={e => setPrice(e.target.value.replace(/[^\d.,]/g, ''))} /><span className="suffix">₽</span></div></div>
       </div>
       <div className="row2">
-        <div><label className="field-label">НКД за 1 шт.</label><AmountInput value={nkd} onChange={setNkd} suffix="₽" /></div>
+        <div><label className="field-label">НКД за сделку</label><AmountInput value={nkd ?? toInput(nkdTotal)} onChange={setNkd} suffix="₽" placeholder="0" /></div>
         <div><label className="field-label">Комиссия</label><AmountInput value={fee} onChange={setFee} suffix="₽" placeholder="0" /></div>
       </div>
+      <p className="hint" style={{ marginTop: 6 }}>Как в отчёте брокера: «Цена покупки» в рублях, НКД — общей суммой. Номинал {formatMoney(bond.face)}{priceRub > 0 && ` · это ${String(Math.round((priceRub * 100 * 100 * 10000) / bond.face) / 10000).replace('.', ',')}% номинала`}.</p>
       <label className="field-label">Дата</label>
       <input type="date" value={date} max={todayISO()} onChange={e => setDate(e.target.value || todayISO())} />
       <div className="card" style={{ marginTop: 14 }}>
         <div className="line"><span>{type === 'buy' ? 'Спишется со счёта' : 'Придёт на счёт'}</span><strong className="num"><Money v={amount} /></strong></div>
-        <div className="muted small">номинал {formatMoney(bond.face)} · {n} шт. × {String(p || 0).replace('.', ',')}% + НКД {formatMoney(n * nkdPer)}{feeK ? ` ${type === 'buy' ? '+' : '−'} комиссия ${formatMoney(feeK)}` : ''}</div>
+        <div className="muted small num">
+          {n} × {price || 0} ₽ = {formatMoney(body)} + НКД {formatMoney(nkdTotal)} = {formatMoney(deal)}
+          {feeK ? <> {type === 'buy' ? '+' : '−'} комиссия {formatMoney(feeK)}</> : null}
+        </div>
         {type === 'buy' && amount > cash && <p className="warn">На счёте сейчас <Money v={cash} />. Сначала запиши перевод денег на этот счёт, иначе баланс уйдёт в минус.</p>}
       </div>
       {error && <p className="error">{error}</p>}
@@ -193,7 +203,7 @@ export function PositionSheet({ data, position, onClose }: { data: Data; positio
             <div className="line small"><span className="muted">Следующий купон</span><span>{dmy(next.date)} · {next.value == null ? '≈ ' : ''}<Money v={net(perNext * p.qty)} /> на руки</span></div>
           )}
           {bond.matDate && <div className="line small"><span className="muted">Погашение</span><span>{dmy(bond.matDate)}</span></div>}
-          <div className="muted small">ISIN {bond.isin} · обновлено {new Date(bond.updatedAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+          <div className="muted small">{bond.secid}{bond.isin && bond.isin !== bond.secid ? ` · ISIN ${bond.isin}` : ''} · обновлено {new Date(bond.updatedAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
         </div>
       )}
       <div className="row2">
