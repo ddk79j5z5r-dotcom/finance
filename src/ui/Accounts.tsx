@@ -7,7 +7,7 @@ import { AddBondSheet, BondList, PositionSheet } from './Bonds'
 import { formatMoney, monthGenitive, monthOf, plural, todayISO } from '../domain/money'
 import { ACCOUNT_COLORS, CURRENCIES, type Account, type AccountColor, type AccountKind, type Currency } from '../domain/types'
 import { AccountBadge, COLOR_LABEL } from './AccountBadge'
-import { AmountInput, Bar, Chips, CUR_SUFFIX, fromInput, Money, Sheet, toInput, useOnce } from './common'
+import { AmountInput, Chips, CUR_SUFFIX, fromInput, Money, Sheet, toInput, useOnce } from './common'
 import { activeAccounts, rateHint, type Data } from './data'
 import type { OpsFilter } from './History'
 import { Icon } from './icons'
@@ -43,13 +43,27 @@ export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFi
             const b = data.value.get(a.id!) ?? 0
             const goals = data.progress.filter(p => p.goal.accountId === a.id)
             return (
-              <div className="card" key={a.id} style={{ paddingTop: 4, paddingBottom: goals.length ? 10 : 4 }}>
+              <div className="card" key={a.id} style={{ paddingTop: 4, paddingBottom: 4 }}>
                 <div className="row">
                   <button className="row-main" onClick={() => setEditAcc(a)}>
                     <AccountBadge account={a} color={data.colorOf(a)} />
                     <div className="body">
                       <div className="title">{a.name}</div>
-                      <div className="sub">{a.currency !== 'RUB' ? `${a.currency} · ` : ''}{a.id === data.settings.defaultAccountId ? 'основной' : KIND_LABEL[accountKind(a)]}{a.showOnHome ? ' · на главной' : ''}</div>
+                      {goals.length === 0 && <div className="sub">{a.currency !== 'RUB' ? `${a.currency} · ` : ''}{a.id === data.settings.defaultAccountId ? 'основной' : KIND_LABEL[accountKind(a)]}{a.showOnHome ? ' · на главной' : ''}</div>}
+                      {/* Цель — компактно: полоска заполнения и одна строка «процент из суммы · срок». */}
+                      {goals.map(p => {
+                        const pct = p.goal.target > 0 ? Math.min(100, Math.floor((p.saved / p.goal.target) * 100)) : 0
+                        const plan = data.goalPlans.get(p.goal.id!)
+                        return (
+                          <div className="goal-mini" key={p.goal.id}>
+                            <div className="track"><div className="fill" style={{ width: `${Math.max(pct, p.saved > 0 ? 2 : 0)}%` }} /></div>
+                            <div className="sub">
+                              {p.remaining <= 0 ? <span className="pos">цель собрана ✓</span> : <>{pct}% из <Money v={p.goal.target} cur={a.currency} /></>}
+                              {p.goal.deadline && p.remaining > 0 && <> · до {monthGenitive(p.goal.deadline)}{plan && plan.left > 0 && <>, ещё <Money v={plan.left} cur={a.currency} /></>}</>}
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                     <div className={`amt ${b < 0 ? 'neg' : ''}`}>
                       <Money v={b} cur={a.currency} />
@@ -63,25 +77,6 @@ export function Accounts({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsFi
                   </div>
                 )}
                 <BondList data={data} accountId={a.id!} onOpen={setPosition} />
-                {goals.map(p => {
-                  const plan = data.goalPlans.get(p.goal.id!)
-                  return (
-                    <button key={p.goal.id} onClick={() => setEditAcc(a)} style={{ display: 'block', width: '100%', padding: '8px 0' }}>
-                      <div className="line small" style={{ padding: 0 }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="target" size={16} /> {goals.length > 1 ? p.goal.name : 'Цель'}</span>
-                        <span className="num"><Money v={p.saved} cur={a.currency} /> <span className="muted">из <Money v={p.goal.target} cur={a.currency} /></span></span>
-                      </div>
-                      <Bar value={p.saved} max={p.goal.target} color="var(--savings)" />
-                      {p.goal.deadline && plan && p.remaining > 0 && (
-                        <div className="muted small">
-                          к концу {monthGenitive(p.goal.deadline)}: по <Money v={plan.monthly} cur={a.currency} />/мес
-                          {plan.left > 0 ? <> · в этом месяце ещё <Money v={plan.left} cur={a.currency} /></> : <> · <span className="pos">месяц закрыт</span></>}
-                        </div>
-                      )}
-                      {p.remaining <= 0 && <div className="pos small">собрано ✓</div>}
-                    </button>
-                  )
-                })}
                 {/* Облигации — только на брокерских счетах (и на старых счетах, где они уже есть). */}
                 {a.currency === 'RUB' && (accountKind(a) === 'broker' || data.trades.some(t => t.accountId === a.id)) && (
                   <button className="link small" style={{ padding: '6px 0' }} onClick={() => setAddBondTo(a.id!)}>+ облигация</button>

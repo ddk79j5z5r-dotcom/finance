@@ -832,3 +832,7 @@ h3 { font-weight: 700; }
 .app { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
 .toast { bottom: calc(84px + env(safe-area-inset-bottom)); }
 @media (prefers-reduced-motion: reduce) { .tabs button, .tabs button .lbl { transition: none; } }
+.goal-mini { margin-top: 5px; }
+.goal-mini .track { height: 5px; border-radius: 3px; background: var(--fill-strong); overflow: hidden; }
+.goal-mini .fill { height: 100%; border-radius: 3px; background: var(--accent); }
+.goal-mini .sub { margin-top: 4px; font-size: 13px; white-space: normal; line-height: 1.3; }
