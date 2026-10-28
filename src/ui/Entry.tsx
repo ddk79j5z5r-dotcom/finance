@@ -210,7 +210,11 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
 
       <input className="comment" name="comment" autoComplete="off" enterKeyHint="done" value={comment} onChange={e => setComment(e.target.value)} placeholder="Комментарий (необязательно)" />
 
-      {error && <div className="error">{error}</div>}
+      {error ? <div className="error">{error}</div> : (() => {
+        // Что ещё заполнить — видно сразу, а не после «Сохранить».
+        const miss = [!minor && 'сумму', !acc && 'счёт', type === 'expense' && rootId == null && 'категорию', type === 'transfer' && !toAcc && 'куда перевести'].filter(Boolean)
+        return <div className="todo" aria-live="polite">{miss.length ? `Осталось указать: ${miss.join(', ').replace(/, ([^,]*)$/, ' и $1')}` : ''}</div>
+      })()}
       <Keypad onKey={k => setExpr(e => applyKey(e, k))} onSave={save} saving={saving} />
     </div>
   )

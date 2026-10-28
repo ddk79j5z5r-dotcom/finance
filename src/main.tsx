@@ -4,6 +4,7 @@ import { registerSW } from 'virtual:pwa-register'
 import App from './App.tsx'
 import { refreshBonds } from './bondsSync'
 import { trackVisualViewport } from './ui/viewport'
+import { trackPress } from './ui/motion'
 import { db } from './db'
 import { refreshLatestRate } from './domain/rates'
 import { seedIfEmpty } from './domain/seed'
@@ -11,6 +12,7 @@ import './index.css'
 
 registerSW({ immediate: true })
 trackVisualViewport()
+trackPress()
 
 // Без зума щипком: Safari на iPhone игнорирует user-scalable=no, поэтому гасим жест вручную.
 for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
