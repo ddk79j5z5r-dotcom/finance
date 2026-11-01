@@ -85,8 +85,6 @@ h3 { font-size: 0.941rem; font-weight: 600; margin: 0; }
 
 /* ---------- Каркас ---------- */
 .app { min-height: 100dvh; padding-bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 1.2rem); }
-/* Сплошная полоса под строкой состояния: прокручиваемое содержимое не просвечивает. */
-.app::after { content: ''; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 15; pointer-events: none; }
 .page { max-width: 560px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 0.5rem) max(1rem, env(safe-area-inset-right)) 1.2rem max(1rem, env(safe-area-inset-left)); }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; min-height: 2.6rem; }
 .page-head h1 { margin: 0; }
@@ -101,7 +99,8 @@ h3 { font-size: 0.941rem; font-weight: 600; margin: 0; }
 .card.tight > .row, .list > .row { padding-left: 0.82rem; padding-right: 0.82rem; }
 .section-title { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; margin: 1.05rem 0.25rem 0.35rem; }
 .section-title h3, .cap { font-size: 0.706rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-.section-title .link { font-size: 0.824rem; text-transform: none; letter-spacing: 0; }
+.section-title .link { font-size: 0.824rem; text-transform: none; letter-spacing: 0; min-height: 2.6rem; min-width: 2.6rem; display: inline-flex; align-items: center; justify-content: flex-end; }
+.section-title { align-items: center; margin-top: 0.7rem; margin-bottom: 0; }
 .day { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; margin: 0.9rem 0.25rem 0.3rem; font-size: 0.765rem; font-weight: 600; color: var(--text-2); }
 .line { display: flex; justify-content: space-between; align-items: center; gap: 0.7rem; width: 100%; padding: 0.3rem 0; }
 .row { display: flex; align-items: center; gap: 0.6rem; width: 100%; min-height: 2.95rem; padding: 0.42rem 0; position: relative; text-align: left; }
@@ -156,14 +155,14 @@ button.row:active, .row.down, .row-main.down { background: var(--press); }
 
 /* ---------- Переключатели, чипы, фильтры ---------- */
 .segmented { display: flex; gap: 2px; background: var(--s1); border-radius: 10px; padding: 2px; margin-bottom: 0.5rem; }
-.segmented button { flex: 1; min-width: 0; min-height: 2rem; border-radius: 8px; text-align: center; font-size: 0.765rem; font-weight: 600; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; }
+.segmented button { flex: 1; min-width: 0; min-height: 2.4rem; border-radius: 8px; text-align: center; font-size: 0.765rem; font-weight: 600; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; }
 .segmented button.on { background: var(--s3); color: var(--text); }
-.segmented.type button.on.expense { background: color-mix(in srgb, var(--neg) 22%, var(--s3)); color: var(--text); }
-.segmented.type button.on.income { background: color-mix(in srgb, var(--pos) 22%, var(--s3)); color: var(--text); }
-.segmented.type button.on.transfer { background: var(--s3); color: var(--text); }
-.segmented.small button { min-height: 1.8rem; }
+.segmented.type button.on[data-v="expense"] { background: color-mix(in srgb, var(--neg) 22%, var(--s3)); color: var(--text); }
+.segmented.type button.on[data-v="income"] { background: color-mix(in srgb, var(--pos) 22%, var(--s3)); color: var(--text); }
+.segmented.type button.on[data-v="transfer"] { background: var(--s3); color: var(--text); }
+.segmented.small button { min-height: 2.4rem; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chip { display: inline-flex; align-items: center; gap: 5px; min-height: 2rem; padding: 0 0.65rem; border-radius: 1rem; background: var(--s1); font-size: 0.765rem; color: var(--text); white-space: nowrap; max-width: 100%; }
+.chip { display: inline-flex; align-items: center; gap: 5px; min-height: 2.6rem; padding: 0 0.8rem; border-radius: 1.3rem; background: var(--s1); font-size: 0.765rem; color: var(--text); white-space: nowrap; max-width: 100%; }
 .chip > span { overflow: hidden; text-overflow: ellipsis; }
 .chip.on { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
 .chip.clear { background: none; color: var(--accent-ink); }
@@ -171,7 +170,7 @@ button.row:active, .row.down, .row-main.down { background: var(--press); }
 .month-nav { display: flex; align-items: center; justify-content: space-between; min-height: 2.4rem; margin-bottom: 0.35rem; }
 .month-nav strong { font-size: 0.882rem; font-weight: 600; }
 .month-nav .icon-btn { color: var(--text-2); }
-.search { display: flex; align-items: center; gap: 6px; min-height: 2.15rem; border-radius: 10px; background: var(--s1); padding: 0 0.6rem; color: var(--muted); margin-bottom: 0.5rem; }
+.search { display: flex; align-items: center; gap: 6px; min-height: 2.6rem; border-radius: 10px; background: var(--s1); padding: 0 0.6rem; color: var(--muted); margin-bottom: 0.5rem; }
 .search input { flex: 1; min-width: 0; border: 0; background: none; padding: 0; min-height: 2.1rem; }
 .search input:focus { border: 0; }
 .scroll-row { display: flex; gap: 6px; overflow-x: auto; margin: 0 -1rem; padding: 0 1rem 2px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
@@ -343,7 +342,7 @@ button.row:active, .row.down, .row-main.down { background: var(--press); }
 /* ---------- Календарь ---------- */
 .cal { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; gap: 2px 0; }
 .cal .wd { font-size: 0.647rem; color: var(--muted); padding: 2px 0 4px; text-transform: uppercase; }
-.cal button { height: 2.35rem; display: grid; justify-items: center; align-content: center; gap: 2px; font-size: 0.824rem; font-variant-numeric: tabular-nums; }
+.cal button { height: 2.6rem; display: grid; justify-items: center; align-content: center; gap: 2px; font-size: 0.824rem; font-variant-numeric: tabular-nums; }
 .cal button .d { width: 1.65rem; height: 1.65rem; display: grid; place-items: center; border-radius: 50%; }
 .cal button.today .d { box-shadow: inset 0 0 0 1.5px var(--accent); }
 .cal button.sel .d { background: var(--accent); color: var(--on-accent); font-weight: 700; box-shadow: none; }
@@ -393,3 +392,27 @@ button, .row-main, label.chip, .date-chip { transition: transform .2s cubic-bezi
 .avail > span { min-width: 0; }
 /* Разряды разделены неразрывным пробелом; если сумма всё равно не помещается (огромный шрифт), переносится, а не вылезает за экран. */
 .avail .v, .balance .big, .trio .v { overflow-wrap: anywhere; }
+
+/* ---------- Шапка: крупный заголовок уходит — сверху полупрозрачная полоса с маленьким ---------- */
+.topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 8; height: calc(env(safe-area-inset-top, 0px) + 2.6rem);
+  display: flex; align-items: center; justify-content: center; padding-top: env(safe-area-inset-top, 0px); pointer-events: none; }
+.topbar-bg { position: absolute; inset: 0; opacity: var(--p, 0); border-bottom: 1px solid var(--sep);
+  background: color-mix(in srgb, var(--bg) 80%, transparent); -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%); }
+.topbar-title { position: relative; font-size: 0.941rem; font-weight: 600; opacity: var(--p, 0); max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar .topbar-back { position: absolute; left: max(0.6rem, env(safe-area-inset-left, 0px)); bottom: 0; margin: 0; pointer-events: auto; }
+
+/* ---------- Подраздел, выезжающий справа ---------- */
+.tab-root { will-change: transform; transform-origin: 0 50%; }
+.pushed { position: fixed; inset: 0; z-index: 9; background: var(--bg); box-shadow: -12px 0 30px rgba(0, 0, 0, 0.35); will-change: transform; }
+.pushed-scroll { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 1.2rem); }
+.topbar.in-push { position: sticky; margin-bottom: calc(-1 * (env(safe-area-inset-top, 0px) + 2.6rem)); }
+.pushed-body { padding-top: calc(env(safe-area-inset-top, 0px) + 2.6rem); }
+.pushed-body .page { padding-top: 0.2rem; }
+.tabs { z-index: 12; }
+
+/* ---------- График: значение под пальцем ---------- */
+.chart-wrap { position: relative; }
+.bubble { position: absolute; top: -0.2rem; transform: translateX(-50%); background: var(--s3); color: var(--text); border-radius: 8px; padding: 0.25rem 0.5rem;
+  font-size: 0.706rem; white-space: nowrap; pointer-events: none; z-index: 1; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); }
+.chart .cross { stroke: var(--muted); stroke-width: 1; }

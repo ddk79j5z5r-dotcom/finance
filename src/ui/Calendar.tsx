@@ -8,6 +8,7 @@ import { BondEventSheet } from './Bonds'
 import { Empty, MonthNav, Section, Segmented } from './common'
 import type { Data } from './data'
 import { BondEventRow, EventRow, EventSheet, TxRow, TxSheet } from './rows'
+import { useMonthSlide } from './nav'
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
@@ -19,6 +20,7 @@ export function Calendar({ data }: { data: Data }) {
   const [ev, setEv] = useState<PlannedEvent | null>(null)
   const [bond, setBond] = useState<BondEvent | null>(null)
   const [tx, setTx] = useState<Tx | null>(null)
+  const slide = useMonthSlide(month)
 
   const [y, m] = month.split('-').map(Number)
   const lead = (new Date(y, m - 1, 1).getDay() + 6) % 7 // понедельник — первый
@@ -46,7 +48,7 @@ export function Calendar({ data }: { data: Data }) {
       <div className="page-head"><h1>Календарь</h1></div>
       <div className="card" style={{ padding: '0.2rem 0.4rem 0.5rem' }}>
         <MonthNav label={monthLabel(month)} onPrev={() => go(-1)} onNext={() => go(1)} />
-        <div className="cal" role="grid" aria-label={monthLabel(month)}>
+        <div ref={slide} className="cal" role="grid" aria-label={monthLabel(month)}>
           {WEEKDAYS.map(w => <div className="wd" key={w}>{w}</div>)}
           {cells.map(d => {
             const inMonth = monthOf(d) === month

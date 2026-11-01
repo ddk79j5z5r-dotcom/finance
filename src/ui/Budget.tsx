@@ -9,6 +9,7 @@ import type { Data } from './data'
 import type { OpsFilter } from './History'
 import { Icon } from './icons'
 import { CategoryRow, EventRow, EventSheet, TxSheet } from './rows'
+import { useMonthSlide } from './nav'
 
 type Sort = 'spent' | 'left' | 'over'
 
@@ -19,6 +20,7 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
   const [limitFor, setLimitFor] = useState<Category | null>(null)
   const [ev, setEv] = useState<PlannedEvent | null>(null)
   const [tx, setTx] = useState<Tx | null>(null)
+  const slide = useMonthSlide(month)
 
   const envs = envelopes(data.categories, data.limits, data.txs, month)
     .filter(e => e.hasLimit || e.spent || !e.category.system)
@@ -47,6 +49,7 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
     <div className="page">
       <div className="page-head"><h1>Бюджет</h1></div>
       <MonthNav label={monthLabel(month)} onPrev={() => setMonth(m => shiftMonth(m, -1))} onNext={() => setMonth(m => shiftMonth(m, 1))} />
+      <div ref={slide}>
 
       {pending.length > 0 && (
         <div className="list">
@@ -104,6 +107,8 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
           </div>
         </>
       )}
+
+      </div>
 
       {cat && (
         <Sheet title={cat.category.name} onClose={() => setCat(null)}>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { balances, capitalByMonth, fxLoss, incomeByKind, spendByRoot } from '../domain/calc'
 import { daysInMonth } from '../domain/insights'
 import { formatMoney, monthLabel, monthOf, plural, shiftMonth, todayISO } from '../domain/money'
@@ -9,6 +9,7 @@ import { activeAccounts, rateHint, type Data } from './data'
 import type { OpsFilter } from './History'
 import { PickSheet } from './History'
 import { Badge, categoryIcon, Icon, INCOME_ICON } from './icons'
+import { useMonthSlide } from './nav'
 
 type Period = 'month' | 'quarter' | 'year'
 const SPAN: Record<Period, number> = { month: 1, quarter: 3, year: 12 }
@@ -48,6 +49,7 @@ export function Analytics({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsF
   const [accountId, setAccountId] = useState<number | null>(null)
   const [pickAcc, setPickAcc] = useState(false)
   const [tip, setTip] = useState<string | null>(null)
+  const slide = useMonthSlide(`${end}|${period}`)
 
   const span = SPAN[period]
   const from = shiftMonth(end, -(span - 1))
@@ -104,6 +106,7 @@ export function Analytics({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsF
         {acc && <button className="chip clear" onClick={() => setAccountId(null)}>Сбросить</button>}
       </div>
 
+      <div ref={slide}>
       {!enoughHistory ? (
         <div className="list"><Empty title="Мало истории для этого периода">Операции есть с {monthLabel(first).toLowerCase()}. Выбери период покороче.</Empty></div>
       ) : (
@@ -122,7 +125,7 @@ export function Analytics({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsF
               <span><i style={{ background: 'var(--c-income)' }} />доходы</span>
               <span><i style={{ background: 'var(--c-expense)' }} />расходы</span>
             </div>
-            <div className="tip" aria-live="polite">{tip ?? 'Нажми на месяц — покажу суммы'}</div>
+            <div className="tip" aria-live="polite">{tip ?? 'Веди пальцем по столбикам — покажу суммы'}</div>
           </div>
 
           <Section title={`Сравнение: ${base}`} />
@@ -175,6 +178,8 @@ export function Analytics({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsF
         </>
       )}
 
+      </div>
+
       {pickAcc && (
         <PickSheet title="Счёт" value={accountId} onClose={() => setPickAcc(false)}
           options={[{ value: null, label: 'Все счета в балансе' }, ...activeAccounts(data.accounts).map(a => ({ value: a.id!, label: a.name }))]}
@@ -197,7 +202,10 @@ function Cmp({ label, now, before, pct, good }: { label: string; now: number; be
 }
 
 /** Доходы и расходы по месяцам: ось сумм с подписями, значение по нажатию на месяц. */
+/** Доходы и расходы по месяцам: ось сумм с подписями; значение следует за пальцем, пока его ведёшь по столбикам. */
 function PairBars({ bars, selected, hidden, onPick }: { bars: { m: string; income: number; expense: number }[]; selected: string | null; hidden: boolean; onPick: (b: { m: string; income: number; expense: number }) => void }) {
+  const [hover, setHover] = useState<number | null>(null)
+  const dragging = useRef(false)
   const W = 330, H = 170, L = 44, B = 20, T = 8
   const max = Math.max(1, ...bars.flatMap(b => [b.income, b.expense]))
   const step = niceStep(max)
@@ -206,22 +214,42 @@ function PairBars({ bars, selected, hidden, onPick }: { bars: { m: string; incom
   const slot = (W - L) / bars.length
   const bw = Math.min(14, slot * 0.32)
   const ticks = Array.from({ length: Math.round(top / step) + 1 }, (_, i) => i * step)
+  const at = (e: React.PointerEvent<SVGSVGElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    const x = ((e.clientX - r.left) / r.width) * W
+    return Math.max(0, Math.min(bars.length - 1, Math.floor((x - L) / slot)))
+  }
+  const show = (i: number) => { if (i !== hover) { setHover(i); onPick(bars[i]) } }
+  const h = hover != null ? bars[hover] : null
+  const cx = (i: number) => L + i * slot + slot / 2
   return (
-    <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={hidden ? 'Доходы и расходы по месяцам, суммы скрыты' : `Доходы и расходы по месяцам: ${bars.map(b => `${SHORT[mIdx(b.m)]} — доходы ${formatMoney(b.income)}, расходы ${formatMoney(b.expense)}`).join('; ')}`}>
-      {ticks.map(t => <g key={t}><line className="grid" x1={L} x2={W} y1={y(t)} y2={y(t)} /><text className="ytick" x={L - 5} y={y(t) + 3} textAnchor="end">{t ? kRub(t) : '0'}</text></g>)}
-      {bars.map((b, i) => {
-        const cx = L + i * slot + slot / 2
-        const on = selected == null || b.m === selected
-        return (
-          <g key={b.m} onClick={() => onPick(b)} style={{ cursor: 'pointer' }} opacity={on ? 1 : 0.45}>
-            <rect x={L + i * slot} y={0} width={slot} height={H} fill="transparent" />
-            <rect x={cx - bw - 1} y={y(b.income)} width={bw} height={Math.max(0, H - B - y(b.income))} rx="2" fill="var(--c-income)" />
-            <rect x={cx + 1} y={y(b.expense)} width={bw} height={Math.max(0, H - B - y(b.expense))} rx="2" fill="var(--c-expense)" />
-            <text x={cx} y={H - 5} textAnchor="middle" className={b.m === selected ? 'val' : undefined}>{SHORT[mIdx(b.m)]}</text>
-          </g>
-        )
-      })}
-    </svg>
+    <div className="chart-wrap">
+      {h && hover != null && (
+        <div className="bubble" style={{ left: `${(cx(hover) / W) * 100}%` }} aria-hidden="true">
+          <b>{SHORT[mIdx(h.m)]}</b>{hidden ? ' · скрыто' : <> · <span className="pos">+{formatMoney(h.income)}</span> · <span className="neg">−{formatMoney(h.expense)}</span></>}
+        </div>
+      )}
+      <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img"
+        aria-label={hidden ? 'Доходы и расходы по месяцам, суммы скрыты' : `Доходы и расходы по месяцам: ${bars.map(b => `${SHORT[mIdx(b.m)]} — доходы ${formatMoney(b.income)}, расходы ${formatMoney(b.expense)}`).join('; ')}`}
+        onPointerDown={e => { dragging.current = true; show(at(e)) }}
+        onPointerMove={e => { if (dragging.current) show(at(e)) }}
+        onPointerUp={() => { dragging.current = false }}
+        onPointerCancel={() => { dragging.current = false }}>
+        {ticks.map(t => <g key={t}><line className="grid" x1={L} x2={W} y1={y(t)} y2={y(t)} /><text className="ytick" x={L - 5} y={y(t) + 3} textAnchor="end">{t ? kRub(t) : '0'}</text></g>)}
+        {hover != null && <line className="cross" x1={cx(hover)} x2={cx(hover)} y1={T} y2={H - B} />}
+        {bars.map((b, i) => {
+          const on = hover != null ? i === hover : selected == null || b.m === selected
+          return (
+            <g key={b.m} style={{ cursor: 'pointer' }} opacity={on ? 1 : 0.45}>
+              <rect x={L + i * slot} y={0} width={slot} height={H} fill="transparent" />
+              <rect x={cx(i) - bw - 1} y={y(b.income)} width={bw} height={Math.max(0, H - B - y(b.income))} rx="2" fill="var(--c-income)" />
+              <rect x={cx(i) + 1} y={y(b.expense)} width={bw} height={Math.max(0, H - B - y(b.expense))} rx="2" fill="var(--c-expense)" />
+              <text x={cx(i)} y={H - 5} textAnchor="middle" className={i === hover || (hover == null && b.m === selected) ? 'val' : undefined}>{SHORT[mIdx(b.m)]}</text>
+            </g>
+          )
+        })}
+      </svg>
+    </div>
   )
 }
 

@@ -116,7 +116,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
             <div className="notice">
               <i className="dot warn" />
               <button className="body" style={{ textAlign: 'left', minHeight: '2rem' }} onClick={onOpenBackup}>{data.settings.lastExportAt ? 'Бэкапа не было больше недели — сохрани Excel' : 'Сделай бэкап в Excel'}</button>
-              <button className="icon-btn" style={{ width: '2rem', height: '2rem' }} aria-label="Напомнить через неделю" onClick={() => saveSettings({ backupNudgeAt: Date.now() })}><Icon name="close" size={14} /></button>
+              <button className="icon-btn" style={{ marginRight: '-0.6rem' }} aria-label="Напомнить через неделю" onClick={() => saveSettings({ backupNudgeAt: Date.now() })}><Icon name="close" size={14} /></button>
             </div>
           )}
         </div>

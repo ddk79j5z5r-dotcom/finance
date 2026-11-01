@@ -7,6 +7,7 @@ import { Empty, Money, Segmented, Sheet } from './common'
 import { rootCategories, type Data } from './data'
 import { Icon } from './icons'
 import { CategoryRow, dayTitle, TxRow, TxSheet, txLook } from './rows'
+import { useMonthSlide } from './nav'
 
 /** Фильтр списка операций. Категория включает свои подкатегории; счёт — и списания, и зачисления. */
 export interface OpsFilter {
@@ -43,6 +44,7 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
   const [pick, setPick] = useState<'period' | 'account' | 'category' | 'income' | null>(null)
   const [limitOpen, setLimitOpen] = useState(false)
 
+  const slide = useMonthSlide(`${filter.from ?? ''}|${filter.to ?? ''}`)
   const q = search.trim().toLowerCase()
   const qNum = q.replace(/\s/g, '').replace(',', '.')
   const all = [...data.txs]
@@ -80,7 +82,7 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
       <label className="search">
         <Icon name="search" size={16} />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Поиск: название, комментарий, сумма" aria-label="Поиск операций" autoComplete="off" enterKeyHint="search" />
-        {search && <button className="icon-btn" style={{ width: '2rem', height: '2rem' }} aria-label="Очистить поиск" onClick={() => setSearch('')}><Icon name="close" size={14} /></button>}
+        {search && <button className="icon-btn" style={{ marginRight: '-0.6rem' }} aria-label="Очистить поиск" onClick={() => setSearch('')}><Icon name="close" size={14} /></button>}
       </label>
 
       <div className="month-nav">
@@ -99,6 +101,7 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
         {anyFilter && <button className="chip clear" onClick={reset}>Сбросить</button>}
       </div>
 
+      <div ref={slide}>
       <div className="trio" aria-live="polite">
         <div><span className="k">{plural(all.length, ['Операция', 'Операции', 'Операций'])}</span><span className="v">{all.length}</span></div>
         <div><span className="k">{filter.accountId != null ? 'Ушло' : 'Расход'}</span><span className="v">{totals.out ? '−' : ''}<Money v={totals.out} /></span></div>
@@ -127,6 +130,7 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
         )
       })}
       {all.length > limit && <button className="secondary" onClick={() => setLimit(l => l + 300)}>Показать ещё {Math.min(300, all.length - limit)}</button>}
+      </div>
 
       {open && <TxSheet data={data} tx={open} onClose={() => setOpen(null)} />}
       {pick === 'period' && <PeriodSheet filter={filter} onPick={f => { setFilter({ ...filter, ...f }); setPick(null) }} onClose={() => setPick(null)} />}
