@@ -20,21 +20,21 @@ const TYPES: { value: TxType; label: string }[] = [
 const yesterday = () => { const d = new Date(); d.setDate(d.getDate() - 1); return todayISO(d) }
 
 /** Быстрый ввод операции; с `tx` — редактирование существующей. */
-export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx: Tx) => void }) {
+export function Entry({ data, tx, preset, onSaved }: { data: Data; tx?: Tx; preset?: { type?: TxType; accountId?: number; toAccountId?: number }; onSaved: (tx: Tx) => void }) {
   const active = useMemo(() => activeAccounts(data.accounts), [data.accounts])
   const defaultAcc = data.settings.defaultAccountId ?? null
   const initialCat = tx?.categoryId != null ? data.categories.find(c => c.id === tx.categoryId) : undefined
 
-  const [type, setType] = useState<TxType>(tx?.type ?? 'expense')
+  const [type, setType] = useState<TxType>(tx?.type ?? preset?.type ?? 'expense')
   // Карты — первыми (основная, затем частые), копилки — после. Для «Куда» в переводе — наоборот.
   const accounts = useMemo(() => accountsForEntry(active, data.txs, defaultAcc, todayISO(), type), [active, data.txs, defaultAcc, type])
   const toAccounts = useMemo(() => [...accounts].sort((a, b) => Number(accountKind(a) === 'card') - Number(accountKind(b) === 'card')), [accounts])
   const [expr, setExpr] = useState(tx ? amountToInput(tx.amount) : '')
-  const [accountId, setAccountId] = useState<number | null>(tx?.accountId ?? defaultAcc ?? accounts[0]?.id ?? null)
+  const [accountId, setAccountId] = useState<number | null>(tx?.accountId ?? preset?.accountId ?? (preset?.toAccountId != null ? accounts.find(a => a.id !== preset.toAccountId)?.id : undefined) ?? defaultAcc ?? accounts[0]?.id ?? null)
   const [rootId, setRootId] = useState<number | null>(initialCat ? (initialCat.parentId ?? initialCat.id!) : null)
   const [subId, setSubId] = useState<number | null>(initialCat?.parentId != null ? initialCat.id! : null)
   const [kind, setKind] = useState<IncomeKind>(tx?.incomeKind ?? 'salary')
-  const [toAccountId, setToAccountId] = useState<number | null>(tx?.toAccountId ?? null)
+  const [toAccountId, setToAccountId] = useState<number | null>(tx?.toAccountId ?? preset?.toAccountId ?? null)
   const [toAmount, setToAmount] = useState(toInput(tx?.toAmount))
   const [date, setDate] = useState(tx?.date ?? todayISO())
   const [comment, setComment] = useState(tx?.comment ?? '')
@@ -152,7 +152,7 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
         {hasOperator(expr) && minor ? <>= {formatMoney(minor, acc?.currency)}</> : rubHint != null ? <>≈ {formatMoney(rubHint)}</> : ' '}
         {type === 'transfer' && acc && (data.bal.get(acc.id!) ?? 0) > 0 && (
           <button type="button" className="all-btn" onClick={() => setExpr(amountToInput(data.bal.get(acc.id!) ?? 0))}>
-            Всё: {formatMoney(data.bal.get(acc.id!) ?? 0, acc.currency)}
+            Всё: <span className="money">{formatMoney(data.bal.get(acc.id!) ?? 0, acc.currency)}</span>
           </button>
         )}
       </div>
@@ -163,7 +163,7 @@ export function Entry({ data, tx, onSaved }: { data: Data; tx?: Tx; onSaved: (tx
             const c = data.categories.find(x => x.id === t.categoryId)
             return (
               <button key={t.id} type="button" className="chip recent" onClick={() => repeat(t)}>
-                <Icon name="repeat" size={14} /> {t.comment || c?.name} · {formatMoney(t.amount)}
+                <Icon name="repeat" size={14} /> {t.comment || c?.name} · <span className="money">{formatMoney(t.amount)}</span>
               </button>
             )
           })}

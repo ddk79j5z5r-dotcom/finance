@@ -31,6 +31,8 @@ export interface Account {
   savings?: boolean
   /** С купонов не удерживается налог (например, ИИС). */
   taxFree?: boolean
+  /** Учитывать в общем балансе и в «Доступно до дохода». Не задано — учитывается. */
+  inTotal?: boolean
 }
 
 export const ACCOUNT_COLORS = ['yellow', 'green', 'blue', 'sky', 'orange', 'pink', 'violet', 'gray'] as const
@@ -79,6 +81,8 @@ export interface Limit {
   categoryId: number
   month: string // YYYY-MM
   amount: number // ₽
+  /** Лимит задан явно, даже если он 0 ₽. Запись с amount 0 без этого флажка — «лимит снят» (так было и раньше). */
+  strict?: boolean
 }
 
 export interface Recurring {

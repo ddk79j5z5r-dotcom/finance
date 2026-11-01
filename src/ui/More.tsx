@@ -3,7 +3,8 @@ import { db, saveSettings } from '../db'
 import { refreshLatestRate } from '../domain/rates'
 import { CURRENCIES, type Category, type Currency, type Recurring } from '../domain/types'
 import { disableLock, enrollFaceId, faceIdSupported, getLock, isLockEnabled, setPin } from '../lock'
-import { AmountInput, Bar, Chips, CUR_SUFFIX, fromInput, Money, Sheet, toInput, useOnce } from './common'
+import { AmountInput, Bar, Chips, CUR_SUFFIX, fromInput, Money, Section, Sheet, toInput, useOnce } from './common'
+import { plural } from '../domain/money'
 import { setupSteps } from '../domain/calc'
 import { childrenOf, rateHint, rootCategories, type Data } from './data'
 import { Badge, CATEGORY_ICONS, categoryIcon, Icon, type IconName } from './icons'
@@ -11,13 +12,7 @@ import { ImportCk } from './ImportCk'
 import { notify } from './undo'
 
 export type MoreSection = 'pay' | 'categories' | 'recurring' | 'security' | 'backup' | 'reminders' | 'coinkeeper'
-export type MorePage = 'calendar' | 'analytics' | 'accounts'
-
-const PAGES: { id: MorePage; label: string; sub: string; icon: IconName }[] = [
-  { id: 'accounts', label: 'Счета', sub: 'балансы и цели', icon: 'wallet' },
-  { id: 'analytics', label: 'Аналитика', sub: 'куда уходят', icon: 'chart' },
-  { id: 'calendar', label: 'Календарь', sub: 'платежи', icon: 'calendar' },
-]
+export type MorePage = 'calendar' | 'analytics' | 'accounts' | 'goals' | 'invest'
 
 const SECTIONS: { id: MoreSection; label: string; icon: IconName }[] = [
   { id: 'backup', label: 'Бэкап и Excel', icon: 'download' },
@@ -29,6 +24,17 @@ const SECTIONS: { id: MoreSection; label: string; icon: IconName }[] = [
   { id: 'reminders', label: 'Напоминания', icon: 'bell' },
 ]
 
+/** Строка меню: цветной квадратный значок, название, короткая подсказка о содержимом. */
+function MenuRow({ icon, color, label, sub, onClick }: { icon: IconName; color: string; label: string; sub?: string; onClick: () => void }) {
+  return (
+    <button className="row" onClick={onClick}>
+      <span className="menu-ico" style={{ background: color }}><Icon name={icon} size={16} /></span>
+      <span className="body"><span className="title">{label}</span>{sub && <span className="sub">{sub}</span>}</span>
+      <Icon name="right" size={16} />
+    </button>
+  )
+}
+
 export function More({ data, section, setSection, onOpenPage }: {
   data: Data; section: MoreSection | null; setSection: (s: MoreSection | null) => void; onOpenPage: (p: MorePage) => void
 }) {
@@ -36,6 +42,13 @@ export function More({ data, section, setSection, onOpenPage }: {
   const r = data.latestRate
   const steps = setupSteps(data, data.lockEnabled)
   const stepsDone = steps.filter(x => x.done).length
+  const accounts = data.accounts.filter(a => !a.archived)
+  const brokers = accounts.filter(a => data.trades.some(t => t.accountId === a.id) || a.kind === 'broker')
+  const positions = data.bondPositions.filter(p => p.qty > 0)
+  const today = new Date().toISOString().slice(0, 10)
+  const nextCoupon = data.bonds.flatMap(b => b.coupons.filter(c => c.date >= today).slice(0, 1).map(c => c.date)).sort()[0]
+  const recurring = data.recurring.filter(x => x.active)
+  const backupAgo = data.settings.lastExportAt ? Math.floor((Date.now() - data.settings.lastExportAt) / 864e5) : null
   return (
     <div className="page">
       <div className="page-head"><h1>Ещё</h1></div>
@@ -43,53 +56,62 @@ export function More({ data, section, setSection, onOpenPage }: {
         <div className="card setup">
           <div className="line" style={{ paddingTop: 0 }}>
             <h3>Настрой приложение · {stepsDone} из {steps.length}</h3>
-            <button className="icon-btn" aria-label="Скрыть" onClick={() => saveSettings({ setupDismissed: true })}><Icon name="close" size={18} /></button>
+            <button className="icon-btn" aria-label="Скрыть" onClick={() => saveSettings({ setupDismissed: true })}><Icon name="close" size={16} /></button>
           </div>
           <Bar value={stepsDone} max={steps.length} color="var(--accent)" />
           {steps.map(st => (
             <button key={st.id} className={`setup-step ${st.done ? 'done' : ''}`} disabled={st.done}
-              onClick={() => (st.id === 'goals' ? onOpenPage('accounts') : setSection(st.id))}>
-              <span className="check-circle">{st.done && <Icon name="check" size={14} />}</span>
+              onClick={() => (st.id === 'goals' ? onOpenPage('goals') : setSection(st.id))}>
+              <span className="check-circle">{st.done && <Icon name="check" size={12} />}</span>
               <span className="body">{st.label}</span>
-              {!st.done && <Icon name="right" size={16} />}
+              {!st.done && <Icon name="right" size={14} />}
             </button>
           ))}
         </div>
       )}
-      <div className="big-tiles">
-        {PAGES.map(p => (
-          <button className="big-tile" key={p.id} onClick={() => onOpenPage(p.id)}>
-            <span className="badge"><Icon name={p.icon} size={24} /></span>
-            <strong>{p.label}</strong>
-            <span className="muted small">{p.sub}</span>
-          </button>
-        ))}
+
+      <Section title="Деньги" />
+      <div className="list">
+        <MenuRow icon="wallet" color="#2f6fed" label="Счета" sub={`${accounts.length} ${plural(accounts.length, ['счёт', 'счёта', 'счетов'])}`} onClick={() => onOpenPage('accounts')} />
+        <MenuRow icon="target" color="#21a038" label="Цели" sub={data.goals.length ? `${data.goals.length} ${plural(data.goals.length, ['цель', 'цели', 'целей'])}` : 'ещё нет — задаются у копилки'} onClick={() => onOpenPage('goals')} />
+        {brokers.length > 0 && <MenuRow icon="percent" color="#7a5ae0" label="Инвестиции" sub={`${positions.length} ${plural(positions.length, ['облигация', 'облигации', 'облигаций'])}${nextCoupon ? ` · купон ${new Date(nextCoupon + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}` : ''}`} onClick={() => onOpenPage('invest')} />}
       </div>
-      <div className="section-title"><h3>Настройки</h3></div>
-      <div className="card tight">
-        {SECTIONS.map(s => (
-          <button className="row" key={s.id} onClick={() => setSection(s.id)}>
-            <span className="badge" style={{ width: 34, height: 34, background: 'var(--card-2)', color: 'var(--text-2)' }}><Icon name={s.icon} size={18} /></span>
-            <div className="body title">{s.label}</div>
-            <span className="chev"><Icon name="right" size={18} /></span>
-          </button>
-        ))}
+
+      <Section title="Планирование" />
+      <div className="list">
+        <MenuRow icon="calendar" color="#e09a1f" label="Календарь" sub="платежи, выплаты, купоны" onClick={() => onOpenPage('calendar')} />
+        <MenuRow icon="repeat" color="#2a9d8f" label="Регулярные платежи" sub={recurring.length ? recurring.map(x => x.name).slice(0, 3).join(', ') : 'аренда, кредит, подписки'} onClick={() => setSection('recurring')} />
+        <MenuRow icon="banknote" color="#21a038" label="Выплаты" sub={`зарплата ${data.settings.salaryDay}-го, аванс ${data.settings.advanceDay}-го`} onClick={() => setSection('pay')} />
       </div>
-      <div className="card">
-        <div className="line" style={{ paddingTop: 0 }}>
-          <h3>Курсы ЦБ</h3>
-          <button className="link small" disabled={refreshing} onClick={async () => { setRefreshing(true); await refreshLatestRate(db); setRefreshing(false) }}>
-            {refreshing ? 'Обновляю…' : 'Обновить'}
-          </button>
-        </div>
+
+      <Section title="Анализ" />
+      <div className="list">
+        <MenuRow icon="chart" color="#d6487a" label="Аналитика" sub="доходы и расходы, категории, капитал" onClick={() => onOpenPage('analytics')} />
+      </div>
+
+      <Section title="Данные" />
+      <div className="list">
+        <MenuRow icon="download" color="#5d626d" label="Бэкап и Excel" sub={backupAgo == null ? 'бэкапа ещё не было' : backupAgo === 0 ? 'бэкап сегодня' : `бэкап ${backupAgo} ${plural(backupAgo, ['день', 'дня', 'дней'])} назад`} onClick={() => setSection('backup')} />
+        <MenuRow icon="upload" color="#5d626d" label="Импорт из CoinKeeper" onClick={() => setSection('coinkeeper')} />
+      </div>
+
+      <Section title="Настройки" />
+      <div className="list">
+        <MenuRow icon="tag" color="#5d626d" label="Категории" onClick={() => setSection('categories')} />
+        <MenuRow icon="lock" color="#5d626d" label="Face ID и PIN" sub={data.lockEnabled ? 'включено' : 'выключено'} onClick={() => setSection('security')} />
+        <MenuRow icon="bell" color="#5d626d" label="Напоминания" onClick={() => setSection('reminders')} />
+      </div>
+
+      <Section title="Курсы ЦБ" extra={<button className="link" disabled={refreshing} onClick={async () => { setRefreshing(true); await refreshLatestRate(db); setRefreshing(false) }}>{refreshing ? 'Обновляю…' : 'Обновить'}</button>} />
+      <div className="list">
         {r ? (
           <>
-            <div className="line"><span>USD</span><span className="num">{r.USD.toFixed(2)} ₽</span></div>
-            <div className="line"><span>EUR</span><span className="num">{r.EUR.toFixed(2)} ₽</span></div>
-            <div className="muted small">{rateHint(r)}</div>
+            <div className="row noic" style={{ padding: '0.4rem 0.82rem' }}><span className="body">Доллар США</span><span className="num">{r.USD.toFixed(2)} ₽</span></div>
+            <div className="row noic" style={{ padding: '0.4rem 0.82rem' }}><span className="body">Евро</span><span className="num">{r.EUR.toFixed(2)} ₽</span></div>
           </>
-        ) : <p className="hint">Курсов ещё нет — нужен интернет.</p>}
+        ) : <p className="hint" style={{ padding: '0.5rem 0.82rem', margin: 0 }}>Курсов ещё нет — нужен интернет.</p>}
       </div>
+      <p className="hint">{rateHint(r)} — по нему валютные счета переводятся в рубли.</p>
 
       {section && (
         <Sheet title={SECTIONS.find(s => s.id === section)!.label} onClose={() => setSection(null)}>

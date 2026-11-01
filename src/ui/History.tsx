@@ -1,15 +1,12 @@
 import { useState } from 'react'
-import { db } from '../db'
-import { envelopes, fxLoss, rootOf } from '../domain/calc'
-import { formatMoney, monthLabel, monthOf, plural, shiftMonth, todayISO } from '../domain/money'
+import { envelopes, rootOf } from '../domain/calc'
+import { monthLabel, monthOf, plural, shiftMonth, todayISO } from '../domain/money'
 import { INCOME_LABEL, type IncomeKind, type Tx, type TxType } from '../domain/types'
-import { AccountDot } from './AccountBadge'
 import { LimitSheet } from './Budget'
-import { Bar, Money, Segmented, Sheet, useOnce } from './common'
-import { rootCategories, txView, type Data } from './data'
-import { Entry } from './Entry'
-import { Badge, categoryIcon, Icon } from './icons'
-import { notify } from './undo'
+import { Empty, Money, Segmented, Sheet } from './common'
+import { rootCategories, type Data } from './data'
+import { Icon } from './icons'
+import { CategoryRow, dayTitle, TxRow, TxSheet, txLook } from './rows'
 
 /** Фильтр списка операций. Категория включает свои подкатегории; счёт — и списания, и зачисления. */
 export interface OpsFilter {
@@ -22,15 +19,6 @@ export interface OpsFilter {
 
 type TypeFilter = 'all' | TxType
 
-function dayTitle(date: string) {
-  const today = todayISO()
-  const y = new Date(); y.setDate(y.getDate() - 1)
-  const label = new Date(date + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: date.slice(0, 4) === today.slice(0, 4) ? undefined : 'numeric' })
-  if (date === today) return `Сегодня, ${label}`
-  if (date === todayISO(y)) return `Вчера, ${label}`
-  return label
-}
-
 export function matches(data: Data, t: Tx, f: OpsFilter): boolean {
   if (f.accountId != null && t.accountId !== f.accountId && t.toAccountId !== f.accountId) return false
   if (f.categoryId != null && (t.type !== 'expense' || (t.categoryId !== f.categoryId && rootOf(data.categories, t.categoryId)?.id !== f.categoryId))) return false
@@ -41,29 +29,37 @@ export function matches(data: Data, t: Tx, f: OpsFilter): boolean {
   return true
 }
 
+function periodLabel(f: OpsFilter) {
+  if (!f.from && !f.to) return 'Всё время'
+  if (f.from === f.to) return monthLabel(f.from!)
+  return `${f.from ? monthLabel(f.from) : '…'} — ${f.to ? monthLabel(f.to) : '…'}`
+}
+
 export function History({ data, filter, setFilter }: { data: Data; filter: OpsFilter; setFilter: (f: OpsFilter) => void }) {
-  const [edit, setEdit] = useState<Tx | null>(null)
+  const [open, setOpen] = useState<Tx | null>(null)
   const [type, setType] = useState<TypeFilter>('all')
-  const [search, setSearch] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
   const [limit, setLimit] = useState(150)
-  const [filterOpen, setFilterOpen] = useState(false)
+  const [pick, setPick] = useState<'period' | 'account' | 'category' | 'income' | null>(null)
   const [limitOpen, setLimitOpen] = useState(false)
 
-  const q = search?.trim().toLowerCase() ?? ''
+  const q = search.trim().toLowerCase()
+  const qNum = q.replace(/\s/g, '').replace(',', '.')
   const all = [...data.txs]
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt)
     .filter(t => type === 'all' || t.type === type)
     .filter(t => matches(data, t, filter))
     .filter(t => {
       if (!q) return true
-      const v = txView(data, t)
-      return `${v.title} ${v.sub} ${t.comment}`.toLowerCase().includes(q) || formatMoney(t.amount).replace(/\s/g, '').includes(q.replace(/\s/g, ''))
+      const v = txLook(data, t)
+      return `${v.title} ${v.sub}`.toLowerCase().includes(q) || (/^[\d.]+$/.test(qNum) && String(t.amount / 100).includes(qNum))
     })
   const shown = all.slice(0, limit)
   const byDay = new Map<string, Tx[]>()
   for (const t of shown) byDay.set(t.date, [...(byDay.get(t.date) ?? []), t])
 
-  const active = filter.accountId != null || filter.categoryId != null || filter.from || filter.to || filter.incomeKind
+  // Итоги — по текущей выборке. Переводы между своими счетами не доход и не расход;
+  // при фильтре по счёту приход/уход по нему считается движением этого счёта.
   const totals = all.reduce((s, t) => {
     if (t.type === 'income') s.in += t.rub
     else if (t.type === 'expense') s.out += t.rub
@@ -71,170 +67,137 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
     return s
   }, { in: 0, out: 0 })
 
-  // Конверт категории, если смотрим одну категорию за один месяц.
+  const single = filter.from && filter.from === filter.to ? filter.from : null
   const cat = filter.categoryId != null ? data.categories.find(c => c.id === filter.categoryId) : undefined
-  const envMonth = filter.from && filter.from === filter.to ? filter.from : null
-  const env = cat && cat.parentId == null && envMonth ? envelopes(data.categories, data.limits, data.txs, envMonth).find(e => e.category.id === cat.id) : undefined
-
-  const remove = useOnce(async (t: Tx) => {
-    const alloc = await db.allocations.where('txId').equals(t.id!).toArray()
-    await db.transaction('rw', db.txs, db.allocations, async () => {
-      await db.txs.delete(t.id!)
-      await db.allocations.where('txId').equals(t.id!).delete()
-    })
-    setEdit(null)
-    notify('Операция удалена', async () => {
-      await db.transaction('rw', db.txs, db.allocations, async () => {
-        await db.txs.put(t)
-        if (alloc.length) await db.allocations.bulkPut(alloc)
-      })
-    })
-  })
-
-  const chips: { label: string; clear: () => void }[] = []
-  if (filter.accountId != null) chips.push({ label: data.accounts.find(a => a.id === filter.accountId)?.name ?? 'счёт', clear: () => setFilter({ ...filter, accountId: undefined }) })
-  if (cat) chips.push({ label: cat.name, clear: () => setFilter({ ...filter, categoryId: undefined }) })
-  if (filter.incomeKind) chips.push({ label: INCOME_LABEL[filter.incomeKind], clear: () => setFilter({ ...filter, incomeKind: undefined }) })
-  if (filter.from || filter.to) {
-    const label = filter.from === filter.to ? monthLabel(filter.from!) : `${filter.from ? monthLabel(filter.from) : '…'} — ${filter.to ? monthLabel(filter.to) : '…'}`
-    chips.push({ label, clear: () => setFilter({ ...filter, from: undefined, to: undefined }) })
-  }
+  const env = cat && cat.parentId == null && single ? envelopes(data.categories, data.limits, data.txs, single).find(e => e.category.id === cat.id) : undefined
+  const anyFilter = filter.accountId != null || filter.categoryId != null || filter.incomeKind || type !== 'all' || q
+  const reset = () => { setFilter({ from: filter.from, to: filter.to }); setType('all'); setSearch('') }
+  const acc = filter.accountId != null ? data.accounts.find(a => a.id === filter.accountId) : undefined
 
   return (
     <div className="page">
-      <div className="page-head">
-        <h1>Операции</h1>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <button className={search !== null ? 'icon-btn on' : 'icon-btn'} aria-label="Поиск" onClick={() => setSearch(s => (s === null ? '' : null))}><Icon name="search" /></button>
-          <button className={active ? 'icon-btn on' : 'icon-btn'} aria-label="Фильтр" onClick={() => setFilterOpen(true)}><Icon name="filter" /></button>
-        </div>
+      <div className="page-head"><h1>Операции</h1></div>
+      <label className="search">
+        <Icon name="search" size={16} />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Поиск: название, комментарий, сумма" aria-label="Поиск операций" autoComplete="off" enterKeyHint="search" />
+        {search && <button className="icon-btn" style={{ width: '2rem', height: '2rem' }} aria-label="Очистить поиск" onClick={() => setSearch('')}><Icon name="close" size={14} /></button>}
+      </label>
+
+      <div className="month-nav">
+        <button className="icon-btn" aria-label="Предыдущий месяц" disabled={!single} style={{ opacity: single ? 1 : 0.3 }} onClick={() => single && setFilter({ ...filter, from: shiftMonth(single, -1), to: shiftMonth(single, -1) })}><Icon name="left" /></button>
+        <button onClick={() => setPick('period')} aria-label={`Период: ${periodLabel(filter)}. Изменить`}><strong>{periodLabel(filter)}</strong> <Icon name="right" size={12} /></button>
+        <button className="icon-btn" aria-label="Следующий месяц" disabled={!single || single >= monthOf(todayISO())} style={{ opacity: single && single < monthOf(todayISO()) ? 1 : 0.3 }} onClick={() => single && setFilter({ ...filter, from: shiftMonth(single, 1), to: shiftMonth(single, 1) })}><Icon name="right" /></button>
       </div>
-      {search !== null && (
-        <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Категория, комментарий, сумма" style={{ marginBottom: 12 }} />
-      )}
-      {chips.length > 0 && (
-        <div className="scroll-row" style={{ marginBottom: 10 }}>
-          {chips.map(c => (
-            <button key={c.label} className="chip on" onClick={c.clear}>{c.label} <Icon name="close" size={14} /></button>
-          ))}
-          <button className="chip" onClick={() => setFilter({})}>Сбросить</button>
-        </div>
-      )}
+
       <Segmented value={type} onChange={setType} options={[
-        { value: 'all', label: 'Все' }, { value: 'income', label: 'Доходы' }, { value: 'expense', label: 'Расходы' }, { value: 'transfer', label: 'Переводы' },
+        { value: 'all', label: 'Все' }, { value: 'expense', label: 'Расходы' }, { value: 'income', label: 'Доходы' }, { value: 'transfer', label: 'Переводы' },
       ]} />
+      <div className="chips" style={{ marginBottom: '0.6rem' }}>
+        <button className={acc ? 'chip on' : 'chip'} aria-pressed={!!acc} onClick={() => setPick('account')}><span>{acc?.name ?? 'Все счета'}</span><Icon name="right" size={11} /></button>
+        {type !== 'income' && type !== 'transfer' && <button className={cat ? 'chip on' : 'chip'} aria-pressed={!!cat} onClick={() => setPick('category')}><span>{cat?.name ?? 'Все категории'}</span><Icon name="right" size={11} /></button>}
+        {(type === 'income' || filter.incomeKind) && <button className={filter.incomeKind ? 'chip on' : 'chip'} aria-pressed={!!filter.incomeKind} onClick={() => setPick('income')}><span>{filter.incomeKind ? INCOME_LABEL[filter.incomeKind] : 'Вид дохода'}</span><Icon name="right" size={11} /></button>}
+        {anyFilter && <button className="chip clear" onClick={reset}>Сбросить</button>}
+      </div>
+
+      <div className="trio" aria-live="polite">
+        <div><span className="k">{plural(all.length, ['Операция', 'Операции', 'Операций'])}</span><span className="v">{all.length}</span></div>
+        <div><span className="k">{filter.accountId != null ? 'Ушло' : 'Расход'}</span><span className="v">{totals.out ? '−' : ''}<Money v={totals.out} /></span></div>
+        <div><span className="k">{filter.accountId != null ? 'Пришло' : 'Приход'}</span><span className="v pos"><Money v={totals.in} sign /></span></div>
+      </div>
 
       {env && (
-        <div className="card">
-          <div className="line" style={{ paddingTop: 0 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Badge icon={categoryIcon(cat)} tone="needs" size={34} /><strong>{cat!.name}</strong></span>
-            <button className="link" onClick={() => setLimitOpen(true)}>{env.limit ? 'Изменить лимит' : 'Задать лимит'}</button>
-          </div>
-          {env.limit > 0 ? (
-            <>
-              <Bar value={env.spent} max={env.limit} color="var(--accent)" />
-              <div className="muted small">
-                потрачено <Money v={env.spent} /> из <Money v={env.limit} /> ·{' '}
-                <span className={env.available < 0 ? 'neg' : ''}>{env.available < 0 ? 'перерасход' : 'осталось'} <Money v={Math.abs(env.available)} /></span>
-              </div>
-            </>
-          ) : <div className="muted small">лимит не задан</div>}
+        <div className="list">
+          <CategoryRow e={env} onOpen={() => setLimitOpen(true)} />
+          <button className="row noic" onClick={() => setLimitOpen(true)}><span className="body link">{env.hasLimit ? 'Изменить лимит' : 'Задать лимит'}</span></button>
         </div>
       )}
 
-      {active && all.length > 0 && (
-        <div className="muted small" style={{ margin: '0 4px 4px' }}>
-          {all.length} {plural(all.length, ['операция', 'операции', 'операций'])}{totals.out > 0 && <> · расход <Money v={totals.out} /></>}{totals.in > 0 && <> · приход <Money v={totals.in} /></>}
-        </div>
+      {shown.length === 0 && (
+        <div className="list">{data.txs.length
+          ? <Empty title="Ничего не найдено">Измени период или сбрось фильтры.</Empty>
+          : <Empty title="Операций пока нет">Нажми «+» внизу, чтобы записать первую.</Empty>}</div>
       )}
+      {[...byDay].map(([day, list]) => {
+        const net = list.reduce((s, t) => s + (t.type === 'expense' ? -t.rub : t.type === 'income' ? t.rub : 0), 0)
+        return (
+          <section key={day} aria-label={dayTitle(day)}>
+            <div className="day"><span>{dayTitle(day)}</span>{net !== 0 && <span className={net > 0 ? 'pos' : ''}><Money v={net} sign /></span>}</div>
+            <div className="list">{list.map(t => <TxRow key={t.id} data={data} t={t} onOpen={setOpen} />)}</div>
+          </section>
+        )
+      })}
+      {all.length > limit && <button className="secondary" onClick={() => setLimit(l => l + 300)}>Показать ещё {Math.min(300, all.length - limit)}</button>}
 
-      {shown.length === 0 && <p className="hint">{data.txs.length ? 'Ничего не найдено.' : 'Пока пусто — нажми «+» внизу, чтобы записать первую операцию.'}</p>}
-      {[...byDay].map(([day, list]) => (
-        <div key={day}>
-          <div className="day line" style={{ padding: 0 }}>
-            <span>{dayTitle(day)}</span>
-            {(() => { const spent = list.filter(t => t.type === 'expense').reduce((a, t) => a + t.rub, 0); return spent > 0 ? <span className="muted num">−<Money v={spent} /></span> : null })()}
-          </div>
-          <div className="card tight">
-            {list.map(t => {
-              const v = txView(data, t)
-              const acc = data.accounts.find(a => a.id === t.accountId)
-              const to = data.accounts.find(a => a.id === t.toAccountId)
-              const loss = fxLoss(t)
-              return (
-                <button className="row" key={t.id} onClick={() => setEdit(t)}>
-                  <Badge icon={v.icon} tone={v.tone} />
-                  <div className="body">
-                    <div className="title">{v.title}</div>
-                    <div className="sub" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{acc && <AccountDot color={data.colorOf(acc)} />}<span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.sub}</span></div>
-                  </div>
-                  <div className={`amt ${t.type === 'income' ? 'pos' : t.type === 'expense' ? 'neg' : ''}`}>
-                    {t.type === 'expense' ? '−' : t.type === 'income' ? '+' : ''}<Money v={t.amount} cur={acc?.currency} />
-                    {t.type === 'transfer' && to && to.currency !== acc?.currency && <div className="sub">→ <Money v={t.toAmount!} cur={to.currency} /></div>}
-                    {loss !== 0 && <div className="sub">курс {loss > 0 ? '−' : '+'}{formatMoney(Math.abs(loss))}</div>}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      ))}
-      {all.length > limit && <button className="secondary" onClick={() => setLimit(l => l + 300)}>Показать ещё</button>}
-
-      {edit && (
-        <Sheet title="Операция" onClose={() => setEdit(null)}>
-          <Entry data={data} tx={edit} onSaved={() => setEdit(null)} />
-          <button className="danger" onClick={() => remove(edit)}>Удалить</button>
-        </Sheet>
+      {open && <TxSheet data={data} tx={open} onClose={() => setOpen(null)} />}
+      {pick === 'period' && <PeriodSheet filter={filter} onPick={f => { setFilter({ ...filter, ...f }); setPick(null) }} onClose={() => setPick(null)} />}
+      {pick === 'account' && (
+        <PickSheet title="Счёт" value={filter.accountId ?? null} onClose={() => setPick(null)}
+          options={[{ value: null, label: 'Все счета' }, ...data.accounts.filter(a => !a.archived).map(a => ({ value: a.id!, label: a.name }))]}
+          onPick={v => { setFilter({ ...filter, accountId: v ?? undefined }); setPick(null) }} />
       )}
-      {filterOpen && <FilterSheet data={data} filter={filter} onApply={f => { setFilter(f); setFilterOpen(false) }} onClose={() => setFilterOpen(false)} />}
-      {limitOpen && cat && envMonth && <LimitSheet data={data} category={cat} month={envMonth} onClose={() => setLimitOpen(false)} />}
+      {pick === 'category' && (
+        <PickSheet title="Категория" value={filter.categoryId ?? null} onClose={() => setPick(null)}
+          options={[{ value: null, label: 'Все категории' }, ...rootCategories(data.categories).flatMap(c => [
+            { value: c.id!, label: c.name },
+            ...data.categories.filter(s => s.parentId === c.id && !s.archived).map(s => ({ value: s.id!, label: `${c.name} · ${s.name}`, indent: true })),
+          ])]}
+          onPick={v => { setFilter({ ...filter, categoryId: v ?? undefined, incomeKind: undefined }); setType('all'); setPick(null) }} />
+      )}
+      {pick === 'income' && (
+        <PickSheet title="Вид дохода" value={filter.incomeKind ?? null} onClose={() => setPick(null)}
+          options={[{ value: null, label: 'Все' }, ...(Object.keys(INCOME_LABEL) as IncomeKind[]).map(k => ({ value: k, label: INCOME_LABEL[k] }))]}
+          onPick={v => { setFilter({ ...filter, incomeKind: v ?? undefined, categoryId: undefined }); setPick(null) }} />
+      )}
+      {limitOpen && cat && single && <LimitSheet data={data} category={cat} month={single} onClose={() => setLimitOpen(false)} />}
     </div>
   )
 }
 
-function FilterSheet({ data, filter, onApply, onClose }: { data: Data; filter: OpsFilter; onApply: (f: OpsFilter) => void; onClose: () => void }) {
-  const [f, setF] = useState<OpsFilter>(filter)
-  const thisMonth = monthOf(todayISO())
-  const presets: { label: string; from?: string; to?: string }[] = [
-    { label: 'Этот месяц', from: thisMonth, to: thisMonth },
-    { label: 'Прошлый', from: shiftMonth(thisMonth, -1), to: shiftMonth(thisMonth, -1) },
-    { label: '3 месяца', from: shiftMonth(thisMonth, -2), to: thisMonth },
-    { label: 'Всё время' },
-  ]
-  const num = (v: string) => (v ? Number(v) : undefined)
+/** Выбор одного значения списком: выбранное отмечено галочкой. */
+export function PickSheet<T extends string | number>({ title, options, value, onPick, onClose }: {
+  title: string; options: { value: T | null; label: string; indent?: boolean }[]; value: T | null; onPick: (v: T | null) => void; onClose: () => void
+}) {
   return (
-    <Sheet title="Фильтр" onClose={onClose}>
-      <label className="field-label">Период</label>
-      <div className="chips">
-        {presets.map(p => (
-          <button key={p.label} type="button" className={f.from === p.from && f.to === p.to ? 'chip on' : 'chip'} onClick={() => setF({ ...f, from: p.from, to: p.to })}>{p.label}</button>
+    <Sheet title={title} onClose={onClose}>
+      <div className="list">
+        {options.map(o => (
+          <button key={String(o.value)} className="row noic" aria-pressed={o.value === value} onClick={() => onPick(o.value)} style={o.indent ? { paddingLeft: '1.6rem' } : undefined}>
+            <span className="body">{o.label}</span>{o.value === value && <Icon name="check" size={18} />}
+          </button>
         ))}
       </div>
-      <div className="row2" style={{ marginTop: 10 }}>
-        <input type="month" value={f.from ?? ''} onChange={e => setF({ ...f, from: e.target.value || undefined })} aria-label="С месяца" />
-        <input type="month" value={f.to ?? ''} onChange={e => setF({ ...f, to: e.target.value || undefined })} aria-label="По месяц" />
-      </div>
-      <label className="field-label">Счёт</label>
-      <select value={f.accountId ?? ''} onChange={e => setF({ ...f, accountId: num(e.target.value) })}>
-        <option value="">Все счета</option>
-        {data.accounts.filter(a => !a.archived).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-      </select>
-      <label className="field-label">Категория расхода</label>
-      <select value={f.categoryId ?? ''} onChange={e => setF({ ...f, categoryId: num(e.target.value), incomeKind: undefined })}>
-        <option value="">Все категории</option>
-        {rootCategories(data.categories).flatMap(c => [
-          <option key={c.id} value={c.id}>{c.name}</option>,
-          ...data.categories.filter(s => s.parentId === c.id && !s.archived).map(s => <option key={s.id} value={s.id}>{'   '}{c.name} · {s.name}</option>),
-        ])}
-      </select>
-      <label className="field-label">Вид дохода</label>
-      <select value={f.incomeKind ?? ''} onChange={e => setF({ ...f, incomeKind: (e.target.value || undefined) as IncomeKind | undefined, categoryId: undefined })}>
-        <option value="">Все</option>
-        {(Object.keys(INCOME_LABEL) as IncomeKind[]).map(k => <option key={k} value={k}>{INCOME_LABEL[k]}</option>)}
-      </select>
-      <button className="save" onClick={() => onApply(f)}>Показать</button>
-      <button className="secondary" onClick={() => onApply({})}>Сбросить фильтр</button>
     </Sheet>
   )
 }
+
+/** Период: быстрые варианты и произвольный диапазон месяцев. */
+function PeriodSheet({ filter, onPick, onClose }: { filter: OpsFilter; onPick: (f: OpsFilter) => void; onClose: () => void }) {
+  const m = monthOf(todayISO())
+  const [from, setFrom] = useState(filter.from ?? '')
+  const [to, setTo] = useState(filter.to ?? '')
+  const presets: { label: string; from?: string; to?: string }[] = [
+    { label: 'Этот месяц', from: m, to: m },
+    { label: 'Прошлый месяц', from: shiftMonth(m, -1), to: shiftMonth(m, -1) },
+    { label: 'Последние 3 месяца', from: shiftMonth(m, -2), to: m },
+    { label: 'Этот год', from: `${m.slice(0, 4)}-01`, to: m },
+    { label: 'Всё время' },
+  ]
+  return (
+    <Sheet title="Период" onClose={onClose}>
+      <div className="list">
+        {presets.map(p => (
+          <button key={p.label} className="row noic" onClick={() => onPick({ from: p.from, to: p.to })}>
+            <span className="body">{p.label}</span>{filter.from === p.from && filter.to === p.to && <Icon name="check" size={18} />}
+          </button>
+        ))}
+      </div>
+      <label className="field-label">Свой диапазон</label>
+      <div className="row2">
+        <input type="month" value={from} max={m} onChange={e => setFrom(e.target.value)} aria-label="С месяца" />
+        <input type="month" value={to} max={m} onChange={e => setTo(e.target.value)} aria-label="По месяц" />
+      </div>
+      <button className="save" onClick={() => onPick({ from: from || undefined, to: to || undefined })}>Показать {from || to ? `${from ? monthLabel(from) : '…'} — ${to ? monthLabel(to) : '…'}` : 'всё время'}</button>
+    </Sheet>
+  )
+}
+

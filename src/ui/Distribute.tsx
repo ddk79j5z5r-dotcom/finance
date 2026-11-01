@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { db } from '../db'
 import { suggestDistribution } from '../domain/calc'
-import { formatMoney, monthOf } from '../domain/money'
+import { monthOf } from '../domain/money'
 import { INCOME_LABEL, type Tx } from '../domain/types'
 import { Money, Sheet, useOnce } from './common'
 import type { Data } from './data'
@@ -26,7 +26,8 @@ export function Distribute({ data, tx, onClose }: { data: Data; tx: Tx; onClose:
   })
 
   return (
-    <Sheet title={`${INCOME_LABEL[tx.incomeKind!]}: ${formatMoney(tx.amount, acc?.currency)}`} onClose={onClose}>
+    <Sheet title={INCOME_LABEL[tx.incomeKind!]} onClose={onClose}>
+      <p className="hint" style={{ marginTop: 0 }}>Пришло <Money v={tx.amount} cur={acc?.currency} />{acc ? ` на «${acc.name}»` : ''}</p>
       {d.reserves.length > 0 && (
         <>
           <div className="day">Отложить на платежи</div>

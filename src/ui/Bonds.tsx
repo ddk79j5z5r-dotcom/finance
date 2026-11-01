@@ -24,7 +24,7 @@ export function BondList({ data, accountId, onOpen }: { data: Data; accountId: n
           </span>
           <span className="amt">
             <Money v={p.value} />
-            <span className={`sub ${p.profit >= 0 ? 'pos' : 'neg'}`}>{p.profit >= 0 ? '+' : '−'}{formatMoney(Math.abs(p.profit))}</span>
+            <span className={`sub ${p.profit >= 0 ? 'pos' : 'neg'}`}>{p.profit >= 0 ? '+' : '−'}<span className="money">{formatMoney(Math.abs(p.profit))}</span></span>
           </span>
         </button>
       ))}

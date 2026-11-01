@@ -55,18 +55,25 @@ export function spentByEnvelope(categories: Category[], txs: Tx[], month: string
   return res
 }
 
-/** Лимит конверта в месяце: последняя запись с month <= данного. */
-export function limitFor(limits: Limit[], categoryId: number, month: string): number {
+/** Запись лимита, действующая в месяце: последняя с month <= данного. */
+function limitRecord(limits: Limit[], categoryId: number, month: string): Limit | undefined {
   let best: Limit | undefined
   for (const l of limits) {
     if (l.categoryId === categoryId && l.month <= month && (!best || l.month > best.month)) best = l
   }
-  return best?.amount ?? 0
+  return best
+}
+
+/** Лимит конверта в месяце (0 — нет лимита или лимит 0 ₽; различает `hasLimit` у конверта). */
+export function limitFor(limits: Limit[], categoryId: number, month: string): number {
+  return limitRecord(limits, categoryId, month)?.amount ?? 0
 }
 
 export interface Envelope {
   category: Category
   limit: number
+  /** Лимит задан (в том числе явно 0 ₽). Без лимита — false. */
+  hasLimit: boolean
   spent: number
   available: number // limit − spent; каждый месяц конверт начинается заново, без переноса
 }
@@ -76,9 +83,10 @@ export function envelopes(categories: Category[], limits: Limit[], txs: Tx[], mo
   const roots = categories.filter(c => c.parentId == null && !c.archived)
   const spent = spentByEnvelope(categories, txs, month)
   return roots.map(category => {
-    const limit = limitFor(limits, category.id!, month)
+    const rec = limitRecord(limits, category.id!, month)
+    const limit = rec?.amount ?? 0
     const s = spent.get(category.id!) ?? 0
-    return { category, limit, spent: s, available: limit - s }
+    return { category, limit, hasLimit: !!rec && (rec.amount > 0 || !!rec.strict), spent: s, available: limit - s }
   })
 }
 

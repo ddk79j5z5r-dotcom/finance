@@ -1,148 +1,103 @@
 import { useState } from 'react'
 import { db } from '../db'
-import { envelopes, isPaid } from '../domain/calc'
-import { formatMoney, monthLabel, monthOf, shiftMonth, todayISO } from '../domain/money'
-import { INCOME_LABEL, type Category, type Recurring, type Tx } from '../domain/types'
-import { AmountInput, Bar, fromInput, Money, MonthNav, Sheet, toInput, useOnce } from './common'
+import { envelopes, plannedInMonth, type Envelope, type PlannedEvent } from '../domain/calc'
+import { monthLabel, monthOf, shiftMonth, todayISO } from '../domain/money'
+import { INCOME_LABEL, type Category, type Tx } from '../domain/types'
 import { AccountBadge } from './AccountBadge'
+import { AmountInput, Empty, fromInput, Money, MonthNav, Section, Segmented, Sheet, toInput, useOnce } from './common'
 import type { Data } from './data'
 import type { OpsFilter } from './History'
-import { Badge, categoryIcon, Icon } from './icons'
+import { Icon } from './icons'
+import { CategoryRow, EventRow, EventSheet, TxSheet } from './rows'
+
+type Sort = 'spent' | 'left' | 'over'
 
 export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistribute: (t: Tx) => void; onOpenOps: (f: OpsFilter) => void }) {
   const [month, setMonth] = useState(monthOf(todayISO()))
-  const [pay, setPay] = useState<Recurring | null>(null)
+  const [sort, setSort] = useState<Sort>('spent')
+  const [cat, setCat] = useState<Envelope | null>(null)
   const [limitFor, setLimitFor] = useState<Category | null>(null)
+  const [ev, setEv] = useState<PlannedEvent | null>(null)
+  const [tx, setTx] = useState<Tx | null>(null)
 
   const envs = envelopes(data.categories, data.limits, data.txs, month)
-    .filter(e => e.limit || e.spent || !e.category.system)
-  const plan = envs.reduce((s, e) => s + e.limit, 0)
-  const fact = envs.reduce((s, e) => s + e.spent, 0)
+    .filter(e => e.hasLimit || e.spent || !e.category.system)
+  const withLimit = envs.filter(e => e.hasLimit)
+  const plan = withLimit.reduce((s, e) => s + e.limit, 0)
+  const spent = envs.reduce((s, e) => s + e.spent, 0)
+  const left = plan - withLimit.reduce((s, e) => s + e.spent, 0)
+  const overCount = withLimit.filter(e => e.spent > e.limit).length
+
+  const sorted = [...envs].sort((a, b) => {
+    if (sort === 'spent') return b.spent - a.spent
+    if (sort === 'left') { // меньше всего осталось — сверху; без лимита — в конце
+      if (a.hasLimit !== b.hasLimit) return a.hasLimit ? -1 : 1
+      return a.available - b.available
+    }
+    const oa = a.hasLimit ? a.spent - a.limit : -Infinity, ob = b.hasLimit ? b.spent - b.limit : -Infinity
+    return ob - oa
+  })
+
   const allocated = new Set(data.allocations.map(a => a.txId))
   const pending = data.txs.filter(t => t.type === 'income' && monthOf(t.date) === month && !allocated.has(t.id!))
-  const active = data.recurring.filter(r => r.active)
-  const payments = active.filter(r => r.kind !== 'topup').sort((a, b) => a.day - b.day)
-  const topups = active.filter(r => r.kind === 'topup')
-  const fundLabel = (r: Recurring) => r.fundFrom === 'both' ? 'пополам из зарплаты и аванса'
-    : r.fundFrom === 'salary' ? `из зарплаты ${data.settings.salaryDay}-го` : `из аванса ${data.settings.advanceDay}-го`
-  const paid = (r: Recurring) => isPaid(r, data.txs, month, x => data.toRub(x.amount, x.currency) ?? x.amount)
-  // С лимитом — сверху, по доле израсходованного; без лимита — ниже, по сумме трат.
-  const sorted = [...envs].sort((a, b) => {
-    const la = a.limit, lb = b.limit
-    if (!!la !== !!lb) return la ? -1 : 1
-    return la ? b.spent / lb - a.spent / la : b.spent - a.spent
-  })
+  const payments = plannedInMonth(data.recurring, data.settings, month).filter(e => e.kind === 'payment')
+  const topups = data.recurring.filter(r => r.active && r.kind === 'topup')
 
   return (
     <div className="page">
       <div className="page-head"><h1>Бюджет</h1></div>
       <MonthNav label={monthLabel(month)} onPrev={() => setMonth(m => shiftMonth(m, -1))} onNext={() => setMonth(m => shiftMonth(m, 1))} />
 
-      {pending.map(t => (
-        <button className="banner accent-b" key={t.id} onClick={() => onDistribute(t)}>
-          <Badge icon="banknote" tone="income" size={34} />
-          <span className="body">{INCOME_LABEL[t.incomeKind!]} <strong><Money v={t.rub} /></strong> — рекомендация</span>
-          <Icon name="right" size={18} />
-        </button>
-      ))}
+      {pending.length > 0 && (
+        <div className="list">
+          {pending.map(t => (
+            <button className="notice" key={t.id} onClick={() => onDistribute(t)}>
+              <i className="dot" /><span className="body">{INCOME_LABEL[t.incomeKind!]} <Money v={t.rub} /> — сколько отложить</span><Icon name="right" size={14} />
+            </button>
+          ))}
+        </div>
+      )}
 
-      <div className="card">
-        <div className="muted small">План расходов</div>
-        {plan > 0 ? (
-          <>
-            <div className="line" style={{ padding: '2px 0' }}>
-              <span style={{ fontSize: 26, fontWeight: 650, letterSpacing: '-0.02em' }}><Money v={plan} /></span>
-              <span className="pct">{Math.round((fact / plan) * 100)}%</span>
-            </div>
-            <Bar value={fact} max={plan} thick color="var(--pos)" />
-            <div className="line small">
-              <span>Факт <strong className="num"><Money v={fact} /></strong></span>
-              <span className="muted">{plan >= fact ? 'Осталось ' : 'Перерасход '}<strong className={plan >= fact ? '' : 'neg'}><Money v={Math.abs(plan - fact)} /></strong></span>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="line" style={{ padding: '2px 0' }}>
-              <span style={{ fontSize: 26, fontWeight: 650, letterSpacing: '-0.02em' }}><Money v={fact} /></span>
-              <span className="muted small">потрачено</span>
-            </div>
-            <p className="hint" style={{ marginBottom: 0 }}>Лимиты не заданы — нажми на категорию ниже, чтобы задать.</p>
-          </>
-        )}
+      <div className="trio">
+        <div><span className="k">План</span><span className="v">{plan ? <Money v={plan} /> : '—'}</span></div>
+        <div><span className="k">Потрачено</span><span className="v"><Money v={spent} /></span></div>
+        <div><span className="k">{left < 0 ? 'Перерасход' : 'Осталось'}</span><span className={`v ${left < 0 ? 'neg' : ''}`}>{plan ? <Money v={Math.abs(left)} /> : '—'}</span></div>
+      </div>
+      {plan > 0 && (
+        <div className="bar thick" style={{ margin: '-0.3rem 0.2rem 0.4rem' }} aria-hidden="true">
+          <div className={spent > plan ? 'fill over' : 'fill'} style={{ width: `${Math.min(100, (spent / plan) * 100)}%` }} />
+        </div>
+      )}
+      {!plan && <p className="hint">Лимиты не заданы — нажми на категорию, чтобы задать.</p>}
+
+      <Section title="Категории" extra={overCount > 0 ? <span className="pill" style={{ color: 'var(--neg)' }}>перерасход: {overCount}</span> : undefined} />
+      <Segmented value={sort} onChange={setSort} options={[
+        { value: 'spent', label: 'По расходам' }, { value: 'left', label: 'По остатку' }, { value: 'over', label: 'Перерасход' },
+      ]} />
+      <div className="list">
+        {sorted.length === 0 && <Empty title="Нет категорий">Добавь их в «Ещё → Категории».</Empty>}
+        {sorted.map(e => <CategoryRow key={e.category.id} e={e} onOpen={setCat} />)}
       </div>
 
-      <div className="section-title stack"><h3>Категории</h3><span className="muted small">нажми — лимит, <Icon name="list" size={13} /> — операции</span></div>
-      <div className="card tight">
-        {sorted.map(e => {
-          const cap = e.limit
-          return (
-            <div className="row" key={e.category.id}>
-              <button className="row-main" style={{ alignItems: 'flex-start' }} onClick={() => setLimitFor(e.category)}>
-              <Badge icon={categoryIcon(e.category)} tone="needs" />
-              <div className="body">
-                <div className="title">{e.category.name}</div>
-                {cap > 0 ? (
-                  <>
-                    <Bar value={e.spent} max={cap} color="var(--accent)" />
-                    <div className="small num muted">
-                      <Money v={e.spent} /> из <Money v={cap} /> ·{' '}
-                      <span className={e.available < 0 ? 'neg' : ''}>{e.available < 0 ? 'перерасход ' : 'осталось '}{formatMoney(Math.abs(e.available))}</span>
-                    </div>
-                  </>
-                ) : <div className="sub">{e.spent > 0 && <><Money v={e.spent} /> · </>}лимит не задан</div>}
-              </div>
-              </button>
-              {e.spent > 0 && (
-                <button className="icon-btn ops-link" aria-label={`Операции: ${e.category.name}`} onClick={() => onOpenOps({ categoryId: e.category.id, from: month, to: month })}>
-                  <Icon name="list" size={20} />
-                </button>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="section-title"><h3>Регулярные платежи</h3></div>
-      <div className="card tight">
-        {payments.length === 0 && <p className="hint">Добавь аренду и кредит в «Ещё → Регулярные платежи».</p>}
-        {payments.map(r => {
-          const done = paid(r)
-          return (
-            <div className="row" key={r.id}>
-              <Badge icon={categoryIcon(data.categories.find(c => c.id === r.categoryId))} tone="needs" />
-              <div className="body">
-                <div className="title">{r.name} · {r.day}-го</div>
-                <div className="sub">{fundLabel(r)}{r.reserveAccountId != null && ` → ${data.accounts.find(a => a.id === r.reserveAccountId)?.name ?? ''}`}</div>
-              </div>
-              <div className="amt">
-                <Money v={r.amount} cur={r.currency} />
-                <div>{done
-                  ? <span className="pos small">✓ оплачено</span>
-                  : <button className="link small" onClick={() => setPay(r)}>Оплатил</button>}</div>
-              </div>
-            </div>
-          )
-        })}
+      <Section title="Обязательные платежи" />
+      <div className="list">
+        {payments.length === 0 && <Empty title="Платежей нет">Добавь аренду и кредит в «Ещё → Регулярные платежи».</Empty>}
+        {payments.map(e => <EventRow key={`${e.date}${e.kind === 'payment' ? e.recurring.id : ''}`} e={e} data={data} onOpen={setEv} />)}
       </div>
 
       {topups.length > 0 && (
         <>
-          <div className="section-title"><h3>Пополнения копилок</h3></div>
-          <div className="card tight">
+          <Section title="Пополнения копилок" />
+          <div className="list">
             {topups.map(r => {
               const acc = data.accounts.find(a => a.id === r.reserveAccountId)
               const inMonth = data.txs.filter(t => t.type === 'transfer' && t.toAccountId === r.reserveAccountId && monthOf(t.date) === month).reduce((s, t) => s + (t.toAmount ?? t.amount), 0)
+              const done = inMonth >= r.amount
               return (
-                <div className="row" key={r.id}>
-                  {acc ? <AccountBadge account={acc} color={data.colorOf(acc)} /> : <Badge icon="target" tone="savings" />}
-                  <div className="body">
-                    <div className="title">{acc?.name ?? r.name}</div>
-                    <div className="sub">{fundLabel(r)}</div>
-                  </div>
-                  <div className="amt">
-                    <Money v={r.amount} cur={r.currency} />
-                    <div className={`small ${inMonth >= r.amount ? 'pos' : 'muted'}`}>{inMonth >= r.amount ? '✓ пополнено' : <>внесено <Money v={inMonth} /></>}</div>
-                  </div>
+                <div className="row" key={r.id} style={{ padding: '0.42rem 0.82rem' }}>
+                  {acc && <AccountBadge account={acc} color={data.colorOf(acc)} size={30} />}
+                  <span className="body"><span className="title">{acc?.name ?? r.name}</span><span className="sub">{done ? <span className="pos">пополнено</span> : <>внесено <Money v={inMonth} /></>}</span></span>
+                  <span className="amt"><Money v={r.amount} cur={r.currency} /><span className="sub">в месяц</span></span>
                 </div>
               )
             })}
@@ -150,55 +105,44 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
         </>
       )}
 
+      {cat && (
+        <Sheet title={cat.category.name} onClose={() => setCat(null)}>
+          <div className="list"><CategoryRow e={cat} onOpen={() => {}} /></div>
+          <div className="btn-row">
+            <button className="secondary" onClick={() => { setCat(null); onOpenOps({ categoryId: cat.category.id, from: month, to: month }) }}><Icon name="list" size={16} /> Операции</button>
+            <button className="save" onClick={() => { setLimitFor(cat.category); setCat(null) }}>{cat.hasLimit ? 'Изменить лимит' : 'Задать лимит'}</button>
+          </div>
+        </Sheet>
+      )}
       {limitFor && <LimitSheet data={data} category={limitFor} month={month} onClose={() => setLimitFor(null)} />}
-      {pay && <PaySheet data={data} r={pay} onClose={() => setPay(null)} />}
+      {ev && <EventSheet data={data} e={ev} onClose={() => setEv(null)} onOpenTx={setTx} />}
+      {tx && <TxSheet data={data} tx={tx} onClose={() => setTx(null)} />}
     </div>
   )
 }
 
+/** Лимит с этого месяца. Можно задать 0 ₽ (тратить нельзя) или снять лимит совсем. */
 export function LimitSheet({ data, category, month, onClose }: { data: Data; category: Category; month: string; onClose: () => void }) {
   const cur = envelopes(data.categories, data.limits, data.txs, month).find(e => e.category.id === category.id)
-  const [value, setValue] = useState(toInput(cur?.limit))
-  const save = useOnce(async () => {
-    const amount = fromInput(value) ?? 0
+  const [value, setValue] = useState(cur?.hasLimit ? toInput(cur.limit) || '0' : '')
+  const put = async (amount: number, strict: boolean) => {
     const existing = data.limits.find(l => l.categoryId === category.id && l.month === month)
-    await db.limits.put({ ...(existing ?? {}), categoryId: category.id!, month, amount })
+    await db.limits.put({ ...(existing ?? {}), categoryId: category.id!, month, amount, strict })
+  }
+  const save = useOnce(async () => {
+    const amount = fromInput(value)
+    if (value.trim() === '' || amount == null) await put(0, false)
+    else await put(amount, true)
     onClose()
   })
+  const clear = useOnce(async () => { await put(0, false); onClose() })
   return (
     <Sheet title={category.name} onClose={onClose}>
       <label className="field-label">Лимит в месяц начиная с «{monthLabel(month)}»</label>
-      <AmountInput value={value} onChange={setValue} suffix="₽" autoFocus />
-      <p className="hint">Лимит действует каждый месяц, пока не изменишь. Каждый месяц конверт начинается заново — остаток и перерасход не переносятся.</p>
+      <AmountInput value={value} onChange={setValue} suffix="₽" autoFocus placeholder="Без лимита" />
+      <p className="hint">Действует каждый месяц, пока не изменишь. Остаток и перерасход на следующий месяц не переносятся. 0 ₽ — значит, в этой категории тратить не планируешь.</p>
       <button className="save" onClick={save}>Сохранить</button>
-    </Sheet>
-  )
-}
-
-/** «Оплатил» по регулярному платежу — создаёт расход с его категорией. */
-function PaySheet({ data, r, onClose }: { data: Data; r: Recurring; onClose: () => void }) {
-  const accounts = data.accounts.filter(a => !a.archived && a.currency === r.currency)
-  const [accountId, setAccountId] = useState(
-    accounts.find(a => a.id === r.reserveAccountId)?.id ?? accounts.find(a => a.id === data.settings.defaultAccountId)?.id ?? accounts[0]?.id,
-  )
-  const [value, setValue] = useState(toInput(r.amount))
-  const save = useOnce(async () => {
-    const amount = fromInput(value)
-    if (!amount || accountId == null) return
-    const rub = r.currency === 'RUB' ? amount : data.toRub(amount, r.currency)
-    if (rub == null) return
-    await db.txs.add({ date: todayISO(), type: 'expense', accountId, amount, rub, categoryId: r.categoryId, comment: r.name, createdAt: Date.now() })
-    onClose()
-  })
-  return (
-    <Sheet title={`Оплата: ${r.name}`} onClose={onClose}>
-      <AmountInput value={value} onChange={setValue} big />
-      <label className="field-label">Со счёта</label>
-      <select value={accountId ?? ''} onChange={e => setAccountId(Number(e.target.value))}>
-        {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-      </select>
-      {accounts.length === 0 && <p className="error">Нет счёта в валюте платежа</p>}
-      <button className="save" onClick={save} disabled={accounts.length === 0}>Записать расход</button>
+      {cur?.hasLimit && <button className="secondary" onClick={clear}>Снять лимит</button>}
     </Sheet>
   )
 }

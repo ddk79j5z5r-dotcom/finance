@@ -161,11 +161,41 @@ export function useAmountsHidden() {
   return useSyncExternalStore(cb => { listeners.add(cb); return () => listeners.delete(cb) }, readHidden)
 }
 
-/** Сумма — всегда точно, с копейками (округление сбивало при переводе «всего остатка»). */
-export function Money({ v, cur = 'RUB', sign = false }: { v: number; cur?: Currency; sign?: boolean }) {
+/**
+ * Сумма — всегда точно, с копейками. В режиме скрытия текст остаётся (та же ширина — экран не прыгает),
+ * но закрывается плашкой через класс .priv на корне, а экранный диктор слышит «сумма скрыта».
+ */
+export function Money({ v, cur = 'RUB', sign = false, className = '' }: { v: number; cur?: Currency; sign?: boolean; className?: string }) {
   const hidden = useAmountsHidden()
-  if (hidden) return <span className="money">••••</span>
-  return <span className="money">{sign && v > 0 ? '+' : ''}{formatMoney(v, cur)}</span>
+  const text = `${sign && v > 0 ? '+' : ''}${formatMoney(v, cur)}`
+  return <span className={`money ${className}`} aria-label={hidden ? 'сумма скрыта' : undefined}>{text}</span>
+}
+
+/** Подпись с суммой для строк, которые собираются текстом (например, «осталось 2 088 ₽»). */
+export function MoneyText({ children }: { children: ReactNode }) {
+  return <span className="money">{children}</span>
+}
+
+/** Заголовок секции: подпись капсом слева, необязательная ссылка справа. */
+export function Section({ title, action, onAction, extra }: { title: string; action?: string; onAction?: () => void; extra?: ReactNode }) {
+  return (
+    <div className="section-title">
+      <h3>{title}</h3>
+      {action && onAction ? <button className="link" onClick={onAction}>{action}</button> : extra}
+    </div>
+  )
+}
+
+/** Пустое состояние: что здесь появится и что сделать. */
+export function Empty({ title, children }: { title: string; children?: ReactNode }) {
+  return <div className="empty"><b>{title}</b>{children}</div>
+}
+
+export type Status = 'done' | 'late' | 'wait' | 'plan'
+export const STATUS_LABEL: Record<Status, string> = { done: 'выполнено', late: 'просрочено', wait: 'ожидается', plan: 'плановое' }
+/** Статус события — текстом, цвет только помогает. */
+export function StatusTag({ s }: { s: Status }) {
+  return <span className={`st ${s}`}>{STATUS_LABEL[s]}</span>
 }
 
 /** Поле суммы: хранит строку, наружу отдаёт копейки через fromInput. */
