@@ -191,3 +191,81 @@ export function extraTx(e: { date: string; name: string; premium: boolean }, txs
   return txs.find(t => t.type === 'income' && t.date.slice(0, 7) === month &&
     ((e.premium && t.incomeKind === 'bonus') || t.comment.trim().toLocaleLowerCase('ru') === name))
 }
+
+// ---------- Прогноз поступлений месяца по строкам ----------
+
+export interface IncomeItem {
+  key: string
+  kind: 'salary' | 'advance' | 'premium' | 'extra'
+  name: string
+  amount: number // на руки
+  /** Расшифровка: «Начислено», «Налог», «Выплаченный аванс». */
+  lines: { label: string; value: number }[]
+  note?: string
+}
+
+export interface IncomeDay { date: string; total: number; items: IncomeItem[] }
+
+const MONTH_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+
+/**
+ * Поступления месяца по дням и строкам. Зарплата раскладывается на саму зарплату, премию и выплаты «с зарплатой»;
+ * сумма строк дня равна расчёту payForMonth (НДФЛ со всего начисления), поэтому прогноз и шкала совпадают.
+ */
+export function incomeForecast(settings: Settings, month: string): IncomeDay[] {
+  const [y, m] = month.split('-').map(Number)
+  const last = new Date(y, m, 0).getDate()
+  const at = (d: number) => `${month}-${pad(Math.min(Math.max(1, d), last))}`
+  const pay = settings.pay
+  const items: (IncomeItem & { date: string })[] = []
+
+  const salaryDate = at(settings.salaryDay), advanceDate = at(settings.advanceDay)
+  const c = pay ? payForMonth(pay, payMonthFor('salary', salaryDate, settings)) : null
+  // Премия и выплаты «с зарплатой» — отдельными строками, налог на каждую — своей долей.
+  const withSalary: IncomeItem[] = []
+  if (pay && c) {
+    if (c.premium) {
+      const t = tax(c.premium, pay.rate)
+      const p = pay.premium!
+      withSalary.push({ key: 'premium', kind: 'premium', name: 'Премия', amount: c.premium - t, lines: [{ label: 'Начислено', value: c.premium }, { label: 'Налог', value: -t }], note: p.mode === 'percent' ? `${p.value}% от оклада` : undefined })
+    }
+    for (const [i, x] of (pay.extras ?? []).entries()) {
+      if (x.day || !x.amount || !x.name.trim()) continue
+      const t = x.taxed ? tax(x.amount, pay.rate) : 0
+      withSalary.push({ key: `x${i}`, kind: 'extra', name: x.name.trim(), amount: x.amount - t, lines: x.taxed ? [{ label: 'Начислено', value: x.amount }, { label: 'Налог', value: -t }] : [], note: x.taxed ? undefined : 'без налога' })
+    }
+  }
+  const salaryTotal = expectedPay(settings, 'salary', salaryDate)
+  const extrasNet = withSalary.reduce((s, x) => s + x.amount, 0)
+  if (salaryTotal > 0) {
+    const own = salaryTotal - extrasNet
+    const lines = pay?.gross && c
+      ? [{ label: 'Начислено', value: c.base }, { label: 'Налог', value: -(c.tax - withSalary.reduce((s, x) => s - (x.lines.find(l => l.label === 'Налог')?.value ?? 0), 0)) }, { label: 'Выплаченный аванс', value: -c.advance }]
+      : []
+    items.push({ date: salaryDate, key: 'salary', kind: 'salary', name: 'Зарплата', amount: own, lines, note: c && pay?.gross ? `за ${['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'][Number(c.month.slice(5)) - 1]}` : undefined })
+    for (const x of withSalary) items.push({ ...x, date: salaryDate })
+  }
+
+  const advance = expectedPay(settings, 'advance', advanceDate)
+  if (advance > 0) {
+    const a = pay?.gross ? payForMonth(pay, payMonthFor('advance', advanceDate, settings)) : null
+    items.push({
+      date: advanceDate, key: 'advance', kind: 'advance', name: 'Аванс', amount: advance,
+      lines: a ? [{ label: 'Начислено', value: a.advanceGross }, { label: 'Налог', value: -a.advanceTax }] : [],
+      note: a ? `за 1–${ADVANCE_LAST_DAY} ${MONTH_GEN[Number(a.month.slice(5)) - 1]}, ${a.halfDays} из ${a.days} раб. дн.` : undefined,
+    })
+  }
+
+  for (const [i, x] of extrasForMonth(settings, month).entries()) {
+    items.push({ date: x.date, key: `e${i}`, kind: x.premium ? 'premium' : 'extra', name: x.name, amount: x.amount, lines: x.tax ? [{ label: 'Начислено', value: x.gross }, { label: 'Налог', value: -x.tax }] : [], note: x.tax ? undefined : 'без налога' })
+  }
+
+  const days = new Map<string, IncomeDay>()
+  for (const it of items.sort((a, b) => a.date.localeCompare(b.date))) {
+    const d = days.get(it.date) ?? { date: it.date, total: 0, items: [] }
+    d.total += it.amount
+    d.items.push(it)
+    days.set(it.date, d)
+  }
+  return [...days.values()]
+}

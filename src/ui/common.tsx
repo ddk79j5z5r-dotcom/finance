@@ -229,6 +229,13 @@ export function StatusTag({ s, income = false }: { s: Status; income?: boolean }
 }
 
 /** Поле суммы: хранит строку, наружу отдаёт копейки через fromInput. */
+/** Разряды в поле суммы: «132000» → «132 000» (пробелы при разборе суммы игнорируются). */
+const groupDigits = (v: string) => {
+  const raw = v.replace(/[\s\u00a0]/g, '')
+  const m = raw.match(/^(\d+)(.*)$/)
+  return m ? m[1].replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0') + m[2] : raw
+}
+
 export function AmountInput({ value, onChange, placeholder = '0', big = false, autoFocus = false, suffix, tone }: {
   value: string; onChange: (v: string) => void; placeholder?: string; big?: boolean; autoFocus?: boolean; suffix?: string; tone?: string
 }) {
@@ -237,10 +244,10 @@ export function AmountInput({ value, onChange, placeholder = '0', big = false, a
       <input
         inputMode="decimal"
         autoComplete="off"
-        value={value}
+        value={groupDigits(value)}
         placeholder={placeholder}
         autoFocus={autoFocus}
-        onChange={e => onChange(e.target.value.replace(/[^\d.,\s]/g, ''))}
+        onChange={e => onChange(e.target.value.replace(/[^\d.,]/g, ''))}
       />
       {suffix && <span className="suffix">{suffix}</span>}
     </div>
