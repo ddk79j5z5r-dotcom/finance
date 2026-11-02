@@ -11,7 +11,9 @@ interface SheetLayer { depth: (p: number, animate?: boolean) => void }
 const layers: SheetLayer[] = []
 let scrollLocks = 0
 
-export function Sheet({ title, onClose, children, full = false }: { title: string; onClose: () => void; children: ReactNode; full?: boolean }) {
+export function Sheet({ title, onClose, children, full = false, cancel = false }: { title: string; onClose: () => void; children: ReactNode; full?: boolean
+  /** Шапка формы iOS: «Отмена» слева, заголовок по центру. */
+  cancel?: boolean }) {
   const sheetRef = useRef<HTMLDivElement>(null)
   const scrimRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef(onClose)
@@ -136,10 +138,18 @@ export function Sheet({ title, onClose, children, full = false }: { title: strin
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
         onClickCapture={e => { if (st.current.moved) { e.stopPropagation(); e.preventDefault(); st.current.moved = false } }}>
         {!full && <div className="sheet-grip" aria-hidden="true"><i /></div>}
-        <div className="sheet-head">
-          <h2>{title}</h2>
-          <button className="icon-btn" aria-label="Закрыть" onClick={() => close()}><Icon name="close" /></button>
-        </div>
+        {cancel ? (
+          <div className="sheet-head form-head">
+            <button className="link" onClick={() => close()}>Отмена</button>
+            <h2>{title}</h2>
+            <span aria-hidden="true" />
+          </div>
+        ) : (
+          <div className="sheet-head">
+            <h2>{title}</h2>
+            <button className="icon-btn" aria-label="Закрыть" onClick={() => close()}><Icon name="close" /></button>
+          </div>
+        )}
         <div className="sheet-body">{children}</div>
       </div>
     </div>
@@ -165,10 +175,25 @@ export function useAmountsHidden() {
  * Сумма — всегда точно, с копейками. В режиме скрытия текст остаётся (та же ширина — экран не прыгает),
  * но закрывается плашкой через класс .priv на корне, а экранный диктор слышит «сумма скрыта».
  */
-export function Money({ v, cur = 'RUB', sign = false, className = '' }: { v: number; cur?: Currency; sign?: boolean; className?: string }) {
+export function Money({ v, cur = 'RUB', sign = false, whole = false, className = '' }: { v: number; cur?: Currency; sign?: boolean; className?: string
+  /** Без копеек — для сводок, шкал и легенд, где важен порядок суммы. */
+  whole?: boolean }) {
   const hidden = useAmountsHidden()
-  const text = `${sign && v > 0 ? '+' : ''}${formatMoney(v, cur)}`
+  const shown = whole ? Math.round(v / 100) * 100 : v
+  const text = `${sign && shown > 0 ? '+' : ''}${formatMoney(shown, cur)}`
   return <span className={`money ${className}`} aria-label={hidden ? 'сумма скрыта' : undefined}>{text}</span>
+}
+
+/** Крупная сумма: рубли крупно, копейки и знак валюты — мельче, чтобы главная цифра читалась сразу. */
+export function BigMoney({ v, cur = 'RUB', className = '' }: { v: number; cur?: Currency; className?: string }) {
+  const hidden = useAmountsHidden()
+  const text = formatMoney(v, cur)
+  const m = text.match(/^(.*?)(,\d\d)?(\s\S+)$/)
+  return (
+    <span className={`money big-money ${className}`} aria-label={hidden ? 'сумма скрыта' : text}>
+      <span aria-hidden="true">{m ? m[1] : text}{m?.[2] && <small>{m[2]}</small>}{m && <small className="cur">{m[3]}</small>}</span>
+    </span>
+  )
 }
 
 /** Подпись с суммой для строк, которые собираются текстом (например, «осталось 2 088 ₽»). */

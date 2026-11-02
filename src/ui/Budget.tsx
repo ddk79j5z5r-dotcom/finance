@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { db } from '../db'
 import { envelopePlan, envelopes, plannedInMonth, subEnvelopes, type Envelope, type PlannedEvent } from '../domain/calc'
-import { monthLabel, monthOf, shiftMonth, todayISO } from '../domain/money'
+import { monthLabel, monthOf, plural, shiftMonth, todayISO } from '../domain/money'
 import { INCOME_LABEL, type Category, type Tx } from '../domain/types'
 import { AccountBadge } from './AccountBadge'
-import { AmountInput, Empty, fromInput, Money, MonthNav, Section, Segmented, Sheet, toInput, useOnce } from './common'
+import { AmountInput, BigMoney, Empty, fromInput, Money, Section, Sheet, toInput, useOnce } from './common'
 import type { Data } from './data'
 import type { OpsFilter } from './History'
 import { Icon } from './icons'
@@ -12,10 +12,12 @@ import { CategoryRow, EventRow, EventSheet, TxSheet } from './rows'
 import { useMonthSlide } from './nav'
 
 type Sort = 'spent' | 'left' | 'over'
+const SORTS: [Sort, string][] = [['spent', 'по расходам'], ['left', 'по остатку'], ['over', 'перерасход сверху']]
 
 export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistribute: (t: Tx) => void; onOpenOps: (f: OpsFilter) => void }) {
   const [month, setMonth] = useState(monthOf(todayISO()))
   const [sort, setSort] = useState<Sort>('spent')
+  const [showIdle, setShowIdle] = useState(false)
   const [opened, setCat] = useState<Envelope | null>(null)
   const [limitFor, setLimitFor] = useState<Category | null>(null)
   const [ev, setEv] = useState<PlannedEvent | null>(null)
@@ -31,7 +33,9 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
   const withLimit = envs.filter(e => e.hasLimit)
   const plan = withLimit.reduce((s, e) => s + e.limit, 0)
   const spent = envs.reduce((s, e) => s + e.spent, 0)
-  const left = plan - withLimit.reduce((s, e) => s + e.spent, 0)
+  const spentIn = withLimit.reduce((s, e) => s + e.spent, 0)
+  const left = plan - spentIn
+  const idle = envs.filter(e => !e.hasLimit && !e.spent).length
   const overCount = withLimit.filter(e => e.spent > e.limit).length
 
   const sorted = [...envs].sort((a, b) => {
@@ -51,8 +55,14 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
 
   return (
     <div className="page">
-      <div className="page-head"><h1>Бюджет</h1></div>
-      <MonthNav label={monthLabel(month)} onPrev={() => setMonth(m => shiftMonth(m, -1))} onNext={() => setMonth(m => shiftMonth(m, 1))} />
+      <div className="page-head">
+        <h1>Бюджет</h1>
+        <div className="head-actions">
+          <button className="icon-btn" aria-label="Предыдущий месяц" onClick={() => setMonth(m => shiftMonth(m, -1))}><Icon name="left" size={16} /></button>
+          <span className="menu-chip" aria-live="polite">{monthLabel(month)}</span>
+          <button className="icon-btn" aria-label="Следующий месяц" onClick={() => setMonth(m => shiftMonth(m, 1))}><Icon name="right" size={16} /></button>
+        </div>
+      </div>
       <div ref={slide}>
 
       {pending.length > 0 && (
@@ -65,25 +75,42 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
         </div>
       )}
 
-      <div className="trio">
-        <div><span className="k">План</span><span className="v">{plan ? <Money v={plan} /> : '—'}</span></div>
-        <div><span className="k">Потрачено</span><span className="v"><Money v={spent} /></span></div>
-        <div><span className="k">{left < 0 ? 'Перерасход' : 'Осталось'}</span><span className={`v ${left < 0 ? 'neg' : ''}`}>{plan ? <Money v={Math.abs(left)} /> : '—'}</span></div>
-      </div>
-      {plan > 0 && (
-        <div className="bar thick" style={{ margin: '-0.3rem 0.2rem 0.4rem' }} aria-hidden="true">
-          <div className={spent > plan ? 'fill over' : 'fill'} style={{ width: `${Math.min(100, (spent / plan) * 100)}%` }} />
+      <section className="hero budget-hero">
+        <div className="hero-main">
+          <span className="cap">{!plan ? 'Лимиты не заданы' : left < 0 ? 'Перерасход бюджета' : 'Осталось в бюджете'}</span>
+          {plan ? <BigMoney v={Math.abs(left)} className={left < 0 ? 'hero-v neg' : 'hero-v'} /> : <BigMoney v={spent} className="hero-v" />}
+          <span className="hero-day">{plan ? <>из <Money v={plan} whole /> на {monthLabel(month).toLowerCase()}</> : 'потрачено — задай лимиты, нажав на категорию'}</span>
+          {plan > 0 && (
+            <>
+              <span className="budget-bar" aria-hidden="true">
+                <i className={spentIn > plan ? 'spent over' : 'spent'} style={{ flexGrow: Math.min(spentIn, plan) }} />
+                {plan > spentIn && <i className="left" style={{ flexGrow: plan - spentIn }} />}
+              </span>
+              <span className="budget-legend">
+                <span><i className="spent" />Потрачено <b><Money v={spentIn} whole /></b></span>
+                <span><i className="left" />{left < 0 ? 'Сверх плана' : 'Осталось'} <b><Money v={Math.abs(left)} whole /></b></span>
+                <span className="pct">{Math.round((spentIn / plan) * 100)}%</span>
+              </span>
+              {spent > spentIn && <span className="hero-day" style={{ marginTop: '0.4rem' }}>Ещё <Money v={spent - spentIn} whole /> — в категориях без лимита</span>}
+            </>
+          )}
         </div>
-      )}
-      {!plan && <p className="hint">Лимиты не заданы — нажми на категорию, чтобы задать.</p>}
+      </section>
 
-      <Section title="Категории" extra={overCount > 0 ? <span className="pill" style={{ color: 'var(--neg)' }}>перерасход: {overCount}</span> : undefined} />
-      <Segmented value={sort} onChange={setSort} options={[
-        { value: 'spent', label: 'По расходам' }, { value: 'left', label: 'По остатку' }, { value: 'over', label: 'Перерасход' },
-      ]} />
+      <Section title="Категории" extra={
+        <button className="link" onClick={() => setSort(SORTS[(SORTS.findIndex(x => x[0] === sort) + 1) % SORTS.length][0])} aria-label={`Сортировка: ${SORTS.find(x => x[0] === sort)![1]}. Сменить`}>
+          {overCount > 0 && <span className="pill" style={{ color: 'var(--neg)', marginRight: 8 }}>перерасход: {overCount}</span>}
+          {SORTS.find(x => x[0] === sort)![1]} <Icon name="down" size={12} />
+        </button>
+      } />
       <div className="list">
         {sorted.length === 0 && <Empty title="Нет категорий">Добавь их в «Ещё → Категории».</Empty>}
-        {sorted.map(e => <CategoryRow key={e.category.id} e={e} onOpen={setCat} categories={data.categories} note={e.fromSubs ? 'по подкатегориям' : undefined} />)}
+        {sorted.filter(e => showIdle || e.hasLimit || e.spent).map(e => <CategoryRow key={e.category.id} e={e} onOpen={setCat} categories={data.categories} note={e.fromSubs ? 'по подкатегориям' : undefined} />)}
+        {idle > 0 && (
+          <button className="row noic" style={{ padding: '0 0.82rem' }} onClick={() => setShowIdle(v => !v)} aria-expanded={showIdle}>
+            <span className="body link">{showIdle ? 'Скрыть категории без трат и лимита' : `Ещё ${idle} ${plural(idle, ['категория', 'категории', 'категорий'])} без трат и лимита`}</span>
+          </button>
+        )}
       </div>
 
       <Section title="Обязательные платежи" />

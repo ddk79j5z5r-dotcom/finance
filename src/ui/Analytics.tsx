@@ -116,7 +116,7 @@ export function Analytics({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsF
         <strong>{label}</strong>
         <button className="icon-btn" aria-label="Следующий период" disabled={end >= thisMonth} style={{ opacity: end >= thisMonth ? 0.3 : 1 }} onClick={() => { setEnd(e => shiftMonth(e, span)); setTip(null) }}><Icon name="right" /></button>
       </div>
-      <div className="chips" style={{ marginBottom: '0.6rem' }}>
+      <div className="scroll-row" style={{ marginBottom: "0.6rem" }}>
         <button className={acc ? 'chip on' : 'chip'} aria-pressed={!!acc} onClick={() => setPickAcc(true)}><span>{acc?.name ?? 'Все счета в балансе'}</span><Icon name="right" size={11} /></button>
         <button className={cat ? 'chip on' : 'chip'} aria-pressed={!!cat} onClick={() => setPick('category')}><span>{cat ? categoryPath(data.categories, cat.id) : 'Все категории'}</span><Icon name="right" size={11} /></button>
         {(data.settings.tags?.length || tag) && <button className={tag ? 'chip on' : 'chip'} aria-pressed={!!tag} onClick={() => setPick('tag')}><span>{tag ? `#${tag}` : 'Метка'}</span><Icon name="right" size={11} /></button>}
@@ -128,13 +128,13 @@ export function Analytics({ data, onOpenOps }: { data: Data; onOpenOps: (f: OpsF
         <div className="list"><Empty title="Мало истории для этого периода">Операции есть с {monthLabel(first).toLowerCase()}. Выбери период покороче.</Empty></div>
       ) : (
         <>
-          <div className="trio">
-            <button onClick={() => onOpenOps({ from, to: end, accountId: acc?.id, categoryId: cat?.id, tag: tag ?? undefined })}><span className="k">Доходы</span><span className="v pos"><Money v={cur.income} sign /></span></button>
-            <button onClick={() => onOpenOps({ from, to: end, accountId: acc?.id, categoryId: cat?.id, tag: tag ?? undefined })}><span className="k">Расходы</span><span className="v">{cur.expense ? '−' : ''}<Money v={cur.expense} /></span></button>
-            <div><span className="k">Разница</span><span className={`v ${cur.income - cur.expense < 0 ? 'neg' : ''}`}><Money v={cur.income - cur.expense} sign /></span></div>
+          <div className="trio kpi">
+            <button onClick={() => onOpenOps({ from, to: end, accountId: acc?.id, categoryId: cat?.id, tag: tag ?? undefined })}><span className="v pos"><Money v={cur.income} whole /></span><span className="k">Доходы</span></button>
+            <button onClick={() => onOpenOps({ from, to: end, accountId: acc?.id, categoryId: cat?.id, tag: tag ?? undefined })}><span className="v neg"><Money v={cur.expense} whole /></span><span className="k">Расходы</span></button>
+            <div><span className={`v ${cur.income - cur.expense < 0 ? 'neg' : ''}`}><Money v={cur.income - cur.expense} sign whole /></span><span className="k">Чистый результат</span></div>
           </div>
 
-          <Section title="Доходы и расходы, ₽" />
+          <Section title={`${period === 'month' ? 'Последние' : 'По месяцам:'} ${bars.length} ${plural(bars.length, ['месяц', 'месяца', 'месяцев'])}, ₽`} />
           <div className="card">
             <PairBars bars={bars} selected={period === 'month' ? end : null} hidden={hidden}
               onPick={(b) => setTip(hidden ? `${monthLabel(b.m)}: суммы скрыты` : `${monthLabel(b.m)}: доходы ${formatMoney(b.income)}, расходы ${formatMoney(b.expense)}, разница ${b.income - b.expense < 0 ? '−' : '+'}${formatMoney(Math.abs(b.income - b.expense))}`)} />

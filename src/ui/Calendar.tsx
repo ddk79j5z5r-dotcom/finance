@@ -5,7 +5,8 @@ import { monthLabel, monthOf, shiftMonth, todayISO } from '../domain/money'
 import { eventStatus } from '../domain/plan'
 import type { Recurring, Tx } from '../domain/types'
 import { BondEventSheet } from './Bonds'
-import { Empty, MonthNav, Section, Segmented } from './common'
+import { Empty, Section, Segmented } from './common'
+import { Icon } from './icons'
 import type { Data } from './data'
 import { BondEventRow, EventRow, EventSheet, TxRow, TxSheet } from './rows'
 import { useMonthSlide } from './nav'
@@ -46,8 +47,14 @@ export function Calendar({ data }: { data: Data }) {
   return (
     <div className="page">
       <div className="page-head"><h1>Календарь</h1></div>
-      <div className="card" style={{ padding: '0.2rem 0.4rem 0.5rem' }}>
-        <MonthNav label={monthLabel(month)} onPrev={() => go(-1)} onNext={() => go(1)} />
+      <div className="card cal-card">
+        <div className="cal-head">
+          <strong aria-live="polite">{monthLabel(month)}</strong>
+          <span>
+            <button className="icon-btn" aria-label="Предыдущий месяц" onClick={() => go(-1)}><Icon name="left" size={18} /></button>
+            <button className="icon-btn" aria-label="Следующий месяц" onClick={() => go(1)}><Icon name="right" size={18} /></button>
+          </span>
+        </div>
         <div ref={slide} className="cal" role="grid" aria-label={monthLabel(month)}>
           {WEEKDAYS.map(w => <div className="wd" key={w}>{w}</div>)}
           {cells.map(d => {
@@ -81,8 +88,8 @@ export function Calendar({ data }: { data: Data }) {
         <span><i style={{ background: 'var(--coupon)' }} />купон</span>
       </div>
 
-      <div style={{ marginTop: '0.8rem' }}>
-        <Segmented value={mode} onChange={setMode} options={[{ value: 'day', label: selLabel[0].toUpperCase() + selLabel.slice(1) }, { value: 'month', label: 'Весь месяц' }]} />
+      <div style={{ marginTop: '0.9rem' }}>
+        <Segmented value={mode} onChange={setMode} options={[{ value: 'day', label: selLabel[0].toUpperCase() + selLabel.slice(1) + (selected === today ? ', сегодня' : '') }, { value: 'month', label: 'Весь месяц' }]} />
       </div>
       <div className="list">
         {list.length === 0 && listBond.length === 0 && <Empty title="Ничего не запланировано">{mode === 'day' ? 'В этот день платежей и поступлений нет.' : 'В этом месяце нет плановых событий.'}</Empty>}
@@ -92,7 +99,7 @@ export function Calendar({ data }: { data: Data }) {
       </div>
       {dayTxs.length > 0 && (
         <>
-          <Section title="Операции дня" />
+          <Section title="Фактические операции" />
           <div className="list">{dayTxs.map(t => <TxRow key={t.id} data={data} t={t} onOpen={setTx} />)}</div>
         </>
       )}

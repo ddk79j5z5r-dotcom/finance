@@ -12,7 +12,7 @@ import { ImportCk } from './ImportCk'
 import { notify } from './undo'
 
 export type MoreSection = 'pay' | 'tags' | 'recurring' | 'security' | 'backup' | 'reminders' | 'coinkeeper'
-export type MorePage = 'calendar' | 'analytics' | 'accounts' | 'goals' | 'invest' | 'categories'
+export type MorePage = 'calendar' | 'analytics' | 'accounts' | 'goals' | 'invest' | 'categories' | 'plan'
 
 const SECTIONS: { id: MoreSection; label: string; icon: IconName }[] = [
   { id: 'backup', label: 'Бэкап и Excel', icon: 'download' },
@@ -80,7 +80,7 @@ export function More({ data, section, setSection, onOpenPage }: {
       <Section title="Планирование" />
       <div className="list">
         <MenuRow icon="calendar" color="#e09a1f" label="Календарь" sub="платежи, выплаты, купоны" onClick={() => onOpenPage('calendar')} />
-        <MenuRow icon="repeat" color="#2a9d8f" label="Регулярные платежи" sub={recurring.length ? recurring.map(x => x.name).slice(0, 3).join(', ') : 'аренда, кредит, подписки'} onClick={() => setSection('recurring')} />
+        <MenuRow icon="repeat" color="#2a9d8f" label="План платежей" sub={recurring.length ? recurring.map(x => x.name).slice(0, 3).join(', ') : 'аренда, кредит, подписки'} onClick={() => onOpenPage('plan')} />
         <MenuRow icon="banknote" color="#21a038" label="Выплаты" sub={`зарплата ${data.settings.salaryDay}-го, аванс ${data.settings.advanceDay}-го`} onClick={() => setSection('pay')} />
       </div>
 
@@ -195,7 +195,7 @@ function TagsSection({ data }: { data: Data }) {
 const fundLabel = (f: Recurring['fundFrom'], d: Data) =>
   f === 'both' ? 'пополам из зарплаты и аванса' : f === 'salary' ? `из зарплаты ${d.settings.salaryDay}-го` : `из аванса ${d.settings.advanceDay}-го`
 
-function RecurringSection({ data }: { data: Data }) {
+export function RecurringSection({ data }: { data: Data }) {
   const [edit, setEdit] = useState<Partial<Recurring> | null>(null)
   if (edit) return <RecurringForm data={data} r={edit} onDone={() => setEdit(null)} />
   const payments = data.recurring.filter(r => r.kind !== 'topup').sort((a, b) => a.day - b.day)
@@ -230,7 +230,7 @@ function RecurringSection({ data }: { data: Data }) {
   )
 }
 
-function RecurringForm({ data, r, onDone }: { data: Data; r: Partial<Recurring>; onDone: () => void }) {
+export function RecurringForm({ data, r, onDone }: { data: Data; r: Partial<Recurring>; onDone: () => void }) {
   const isTopup = r.kind === 'topup'
   const [name, setName] = useState(r.name ?? '')
   const [amount, setAmount] = useState(toInput(r.amount))

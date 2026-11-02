@@ -7,12 +7,16 @@ import { AddBondSheet, BondList, PositionSheet } from './Bonds'
 import { formatMoney, monthGenitive, monthOf, plural, todayISO } from '../domain/money'
 import { ACCOUNT_COLORS, CURRENCIES, type Account, type AccountColor, type AccountKind, type Currency } from '../domain/types'
 import { AccountBadge, COLOR_LABEL } from './AccountBadge'
-import { AmountInput, Chips, CUR_SUFFIX, Empty, fromInput, Money, Section, Segmented, Sheet, toInput, useOnce } from './common'
+import { AmountInput, BigMoney, Chips, CUR_SUFFIX, Empty, fromInput, Money, Section, Segmented, Sheet, toInput, useOnce } from './common'
+import { BondEventRow, goalPct, monthYear } from './rows'
+import { bondEvents } from '../domain/bonds'
 import { inTotal } from '../domain/plan'
 import { activeAccounts, rateHint, type Data } from './data'
 import type { OpsFilter } from './History'
 import { Icon } from './icons'
 import { notify } from './undo'
+
+const KIND_LABEL: Record<AccountKind, string> = { card: 'карта', savings: 'накопления', broker: 'брокерский счёт', credit: 'кредит', debt: 'мне должны' }
 
 export type EntryPreset = { type?: 'expense' | 'income' | 'transfer'; accountId?: number; toAccountId?: number }
 
@@ -21,6 +25,7 @@ export function Accounts({ data, onOpenOps, onAdd, initialTab = 'accounts' }: {
   data: Data; onOpenOps: (f: OpsFilter) => void; onAdd: (p: EntryPreset) => void; initialTab?: 'accounts' | 'goals' | 'invest'
 }) {
   const [tab, setTab] = useState(initialTab)
+  const [goalFilter, setGoalFilter] = useState<'all' | 'active' | 'done'>('all')
   const [editAcc, setEditAcc] = useState<Partial<Account> | null>(null)
   const [addBondTo, setAddBondTo] = useState<number | null>(null)
   const [position, setPosition] = useState<Position | null>(null)
@@ -32,35 +37,69 @@ export function Accounts({ data, onOpenOps, onAdd, initialTab = 'accounts' }: {
     ? [['Брокерские счета', accounts.filter(isBroker)]]
     : [
       ['Карты', accounts.filter(a => accountKind(a) === 'card')],
-      ['Копилки', accounts.filter(a => accountKind(a) === 'savings')],
-      ['Брокерские', accounts.filter(a => accountKind(a) === 'broker')],
+      ['Накопления', accounts.filter(a => accountKind(a) === 'savings')],
+      ['Инвестиции', accounts.filter(a => accountKind(a) === 'broker')],
       ['Кредиты и долги', accounts.filter(a => accountKind(a) === 'credit')],
       ['Мне должны', accounts.filter(a => accountKind(a) === 'debt')],
     ]
   const sum = (list: Account[]) => list.reduce((s, a) => s + (data.toRub(data.value.get(a.id!) ?? 0, a.currency) ?? 0), 0)
 
+  const goalsAll = data.progress.filter(p => data.accounts.some(a => a.id === p.goal.accountId))
+  const goalsShown = goalsAll.filter(p => goalFilter === 'all' || (goalFilter === 'done') === (p.remaining <= 0))
+  const brokers = accounts.filter(isBroker)
+  const portfolio = sum(brokers)
+  const cashInBroker = brokers.reduce((s, a) => s + (data.toRub(data.bal.get(a.id!) ?? 0, a.currency) ?? 0), 0)
+  const profit = data.bondPositions.filter(p => p.qty > 0).reduce((s, p) => s + p.profit, 0)
+  const in60 = new Date(); in60.setDate(in60.getDate() + 60)
+  const coupons = tab === 'invest' ? bondEvents(data.trades, data.bonds, todayISO(), todayISO(in60), data.taxFree).slice(0, 5) : []
+  const title = tab === 'invest' ? 'Инвестиции' : tab === 'goals' ? 'Цели' : 'Счета'
+
   return (
     <div className="page">
-      <div className="page-head"><h1>{tab === 'invest' ? 'Инвестиции' : 'Счета и цели'}</h1></div>
+      <div className="page-head">
+        <h1>{title}</h1>
+        <div className="head-actions">
+          {tab !== 'invest' && <button className="round-btn accent" aria-label={tab === 'goals' ? 'Новая цель — копилка' : 'Новый счёт'} onClick={() => setEditAcc(tab === 'goals' ? { currency: 'RUB', kind: 'savings' } : { currency: 'RUB' })}><Icon name="plus" size={20} stroke={2.2} /></button>}
+        </div>
+      </div>
       {tab !== 'invest' && (
         <Segmented value={tab} onChange={v => setTab(v)} options={[{ value: 'accounts', label: 'Счета' }, { value: 'goals', label: 'Цели' }]} />
       )}
 
+      {tab === 'accounts' && (
+        <section className="hero acc-hero">
+          <div className="hero-main">
+            <span className="cap">Всего на счетах</span>
+            <BigMoney v={totalRub} className="hero-v" />
+            <span className="hero-day"><i className="ok-dot" />Включено в общую сумму: {counted.length} из {accounts.length}</span>
+          </div>
+        </section>
+      )}
+
+      {tab === 'invest' && (
+        <section className="hero acc-hero">
+          <div className="hero-main">
+            <span className="cap">Стоимость портфеля</span>
+            <BigMoney v={portfolio} className="hero-v" />
+            {data.bondPositions.some(p => p.qty > 0) && <span className={`hero-day ${profit >= 0 ? 'pos' : 'neg'}`}><Money v={profit} sign /> <span className="muted">— результат с покупки, с купонами</span></span>}
+          </div>
+          <div className="hero-total" style={{ cursor: 'default' }}>
+            <span>Свободные деньги<span className="hero-scope">на брокерских счетах</span></span>
+            <span className="hero-total-v"><Money v={cashInBroker} />{brokers[0] && <button className="fill-btn" style={{ marginLeft: 8 }} onClick={() => onAdd({ type: 'transfer', toAccountId: brokers[0].id })}>Пополнить</button>}</span>
+          </div>
+        </section>
+      )}
+
       {tab !== 'goals' && (
         <>
-          <div className="trio duo">
-            <div><span className="k">{tab === 'invest' ? 'Стоимость' : 'В общем балансе'}</span><span className="v"><Money v={tab === 'invest' ? sum(accounts.filter(isBroker)) : totalRub} /></span></div>
-            <div><span className="k">{tab === 'invest' ? 'Позиций' : 'Счетов учтено'}</span><span className="v">{tab === 'invest' ? data.bondPositions.filter(p => p.qty > 0).length : `${counted.length} из ${accounts.length}`}</span></div>
-          </div>
-          {groups.filter(([, list]) => list.length).map(([title, list]) => (
-            <div key={title}>
-              <Section title={title} extra={<span className="small muted"><Money v={sum(list)} /></span>} />
-              <div className="list">
+          {groups.filter(([, list]) => list.length).map(([gTitle, list]) => (
+            <div className="list grp" key={gTitle}>
+              <div className="grp-head"><span>{gTitle}</span><span className={sum(list) < 0 ? 'neg' : ''}><Money v={sum(list)} /></span></div>
                 {list.map(a => {
                   const b = data.value.get(a.id!) ?? 0
                   const hasBonds = (data.bondValue.get(a.id!) ?? 0) > 0
                   const sub = [
-                    a.id === data.settings.defaultAccountId ? 'основной' : null,
+                    a.id === data.settings.defaultAccountId ? 'основной' : KIND_LABEL[accountKind(a)],
                     a.currency !== 'RUB' ? a.currency : null,
                     hasBonds ? null : data.recurring.some(r => r.reserveAccountId === a.id) ? 'резерв под платежи' : null,
                     inTotal(a) ? null : 'не в балансе',
@@ -69,68 +108,82 @@ export function Accounts({ data, onOpenOps, onAdd, initialTab = 'accounts' }: {
                   return (
                     <div key={a.id}>
                       <button className="row" style={{ padding: '0.42rem 0.82rem' }} onClick={() => setEditAcc(a)}>
-                        <AccountBadge account={a} color={data.colorOf(a)} size={30} />
+                        <AccountBadge account={a} color={data.colorOf(a)} size={34} />
                         <span className="body">
                           <span className="title">{a.name}</span>
                           {credit
-                            ? <span className="sub">{b < 0 ? <>долг <Money v={-b} cur={a.currency} /></> : 'долга нет'}{a.creditLimit ? <> · доступно <Money v={Math.max(0, a.creditLimit + Math.min(0, b))} cur={a.currency} /></> : null}</span>
+                            ? <span className="sub">{a.creditLimit ? <>лимит <Money v={a.creditLimit} cur={a.currency} whole /> · доступно <Money v={Math.max(0, a.creditLimit + Math.min(0, b))} cur={a.currency} whole /></> : 'задолженность'}</span>
                             : hasBonds
                             ? <span className="sub">деньги <Money v={data.bal.get(a.id!) ?? 0} /> · облигации <Money v={data.bondValue.get(a.id!) ?? 0} /></span>
                             : sub && <span className="sub">{sub}</span>}
                         </span>
                         <span className={`amt ${b < 0 ? 'neg' : ''}`}>
                           <Money v={b} cur={a.currency} />
+                          {credit && b < 0 && <span className="sub">долг</span>}
                           {a.currency !== 'RUB' && <span className="sub">≈ <Money v={data.toRub(b, a.currency) ?? 0} /></span>}
                         </span>
                       </button>
                       <BondList data={data} accountId={a.id!} onOpen={setPosition} />
                       {a.currency === 'RUB' && isBroker(a) && (
-                        <button className="row noic" style={{ padding: '0 0.82rem 0 3.1rem', minHeight: '2.4rem' }} onClick={() => setAddBondTo(a.id!)}><span className="body link">+ Облигация</span></button>
+                        <button className="row noic" style={{ padding: '0 0.82rem 0 3.1rem', minHeight: '2.6rem' }} onClick={() => setAddBondTo(a.id!)}><span className="body link">+ Облигация</span></button>
                       )}
                     </div>
                   )
                 })}
-              </div>
             </div>
           ))}
           {tab === 'invest' && !accounts.some(isBroker) && <div className="list"><Empty title="Брокерских счетов нет">Добавь счёт с типом «Облигации» во вкладке «Счета».</Empty></div>}
-          {tab === 'accounts' && <button className="secondary" onClick={() => setEditAcc({ currency: 'RUB' })}>+ Добавить счёт</button>}
+          {tab === 'invest' && accounts.some(isBroker) && (
+            <>
+              <Section title="Ближайшие выплаты" />
+              <div className="list">
+                {coupons.length === 0 && <Empty title="Выплат в ближайшие 60 дней нет" />}
+                {coupons.map(e => <BondEventRow key={e.key} e={e} />)}
+              </div>
+              <p className="hint">Цена облигации — в процентах от номинала; стоимость позиции — по последней цене биржи плюс НКД. График стоимости портфеля появится, когда накопится история цен — сейчас она не сохраняется.</p>
+            </>
+          )}
           {foreignNote(accounts, data)}
         </>
       )}
 
       {tab === 'goals' && (
         <>
-          <p className="hint">Цель — это часть денег копилки: прогресс считается по её балансу, второй раз деньги не учитываются.</p>
-          {data.progress.length === 0 && <div className="list"><Empty title="Целей пока нет">Открой копилку во вкладке «Счета» и задай сумму цели и срок.</Empty></div>}
-          {data.progress.map(p => {
-            const a = data.accounts.find(x => x.id === p.goal.accountId)
-            if (!a) return null
-            const pct = p.goal.target > 0 ? Math.min(100, Math.floor((p.saved / p.goal.target) * 100)) : 0
+          <div className="pills" role="group" aria-label="Какие цели показать">
+            {([['all', 'Все', goalsAll.length], ['active', 'Активные', goalsAll.filter(p => p.remaining > 0).length], ['done', 'Достигнутые', goalsAll.filter(p => p.remaining <= 0).length]] as const).map(([v, l, n]) => (
+              <button key={v} className={goalFilter === v ? 'on' : undefined} aria-pressed={goalFilter === v} onClick={() => setGoalFilter(v)}>{l}<span className="n">{n}</span></button>
+            ))}
+          </div>
+          {goalsAll.length === 0 && <div className="list"><Empty title="Целей пока нет">Нажми «+», создай копилку и задай сумму цели и срок.</Empty></div>}
+          {goalsAll.length > 0 && goalsShown.length === 0 && <div className="list"><Empty title={goalFilter === 'done' ? 'Достигнутых целей пока нет' : 'Все цели достигнуты'} /></div>}
+          {goalsShown.map(p => {
+            const a = data.accounts.find(x => x.id === p.goal.accountId)!
+            const g = goalPct(p.saved, p.goal.target)
             const plan = data.goalPlans.get(p.goal.id!)
             return (
               <div className="card goal-card" key={p.goal.id}>
-                <div className="line" style={{ padding: 0 }}>
-                  <strong className="title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.goal.name}</strong>
-                  <span className="small muted">{p.goal.deadline ? `до ${monthGenitive(p.goal.deadline)}` : 'без срока'}</span>
-                </div>
-                <div className="line" style={{ padding: '0.2rem 0 0' }}>
-                  <span className="big"><Money v={p.saved} cur={a.currency} /></span>
-                  <span className="small muted">из <Money v={p.goal.target} cur={a.currency} /> · {pct}%</span>
-                </div>
-                <div className="bar thick"><div className="fill" style={{ width: `${Math.max(pct, p.saved > 0 ? 1 : 0)}%` }} /></div>
-                <p className="hint" style={{ margin: '0.3rem 0 0' }}>
-                  {p.remaining <= 0 ? <span className="pos">Цель собрана</span>
-                    : p.goal.deadline && plan ? <>Откладывать <Money v={plan.monthly} cur={a.currency} /> в месяц{plan.left > 0 ? <>, в этом месяце ещё <Money v={plan.left} cur={a.currency} /></> : <> · <span className="pos">этот месяц закрыт</span></>}</>
-                    : 'Срок не задан — ежемесячный взнос не считается.'}
-                </p>
-                <div className="btn-row">
-                  <button className="save" onClick={() => onAdd({ type: 'transfer', toAccountId: a.id })}>Пополнить</button>
-                  <button className="secondary" onClick={() => onOpenOps({ accountId: a.id })}>Операции</button>
+                <button className="goal-top" onClick={() => setEditAcc(a)} aria-label={`${p.goal.name}: изменить`}>
+                  <span className="goal-ico"><AccountBadge account={a} color={data.colorOf(a)} size={40} /></span>
+                  <span className="body">
+                    <span className="title">{p.goal.name}</span>
+                    <span className="goal-sum"><Money v={p.saved} cur={a.currency} whole /> <span className="muted">из <Money v={p.goal.target} cur={a.currency} whole /></span></span>
+                  </span>
+                </button>
+                <div className="goal-line"><span className="bar thick"><span className="fill" style={{ display: 'block', width: `${Math.min(100, g.width)}%` }} /></span><span className="pct">{g.label}</span></div>
+                {p.remaining > 0 && p.goal.deadline && plan && (
+                  <p className="goal-plan">Взнос <Money v={plan.monthly} cur={a.currency} whole /> в месяц · {plan.left > 0 ? <>в этом месяце ещё <Money v={plan.left} cur={a.currency} whole /></> : <span className="pos">этот месяц закрыт</span>}</p>
+                )}
+                <div className="goal-foot">
+                  <span className="sub">{p.remaining <= 0 ? <span className="pos">Цель собрана</span> : p.goal.deadline ? <>До {monthYear(p.goal.deadline)}</> : 'Без срока'}</span>
+                  <span className="goal-actions">
+                    <button className="link" style={{ minHeight: 44 }} onClick={() => onOpenOps({ accountId: a.id })}>История</button>
+                    {p.remaining > 0 && <button className="outline-btn" onClick={() => onAdd({ type: 'transfer', toAccountId: a.id })}>Пополнить</button>}
+                  </span>
                 </div>
               </div>
             )
           })}
+          {goalsAll.length > 0 && <p className="hint">Цель — часть денег копилки: прогресс считается по её балансу, второй раз деньги не учитываются.</p>}
         </>
       )}
 
@@ -157,7 +210,7 @@ function AccountSheet({ data, acc, onClose, onOpenOps, onTransfer }: { data: Dat
   const [now, setNow] = useState(isCredit0 ? (current < 0 ? toInput(-current) : '') : current > 0 ? toInput(current) : '')
   const [creditLimit, setCreditLimit] = useState(toInput(acc.creditLimit))
   const [isDefault, setIsDefault] = useState(acc.id != null && acc.id === data.settings.defaultAccountId)
-  const [kind, setKind] = useState<AccountKind>(acc.id != null ? accountKind(acc as Account) : 'card')
+  const [kind, setKind] = useState<AccountKind>(acc.id != null ? accountKind(acc as Account) : acc.kind ?? 'card')
   // null — цвет подбирается сам (по названию банка или следующий по порядку), пока не выбран вручную.
   const [color, setColor] = useState<AccountColor | null>(acc.color ?? null)
   const shownColor = color ?? (acc.id != null ? data.colorOf(acc as Account) : null)

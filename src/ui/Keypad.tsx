@@ -29,7 +29,7 @@ export function Keypad({ onKey, onSave, saving, saveLabel = 'Сохранить'
       {ROWS.flat().map(k => (
         <button key={k} type="button" className={k === 'back' || k === '+' || k === '−' ? 'key op' : 'key'}
           aria-label={k === 'back' ? 'Стереть' : k} onClick={() => onKey(k)}>
-          {k === 'back' ? <Icon name="left" size={22} /> : k}
+          {k === 'back' ? <Icon name="backspace" size={24} /> : k}
         </button>
       ))}
       <button type="button" className="key" onClick={() => onKey(',')}>,</button>

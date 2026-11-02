@@ -36,6 +36,7 @@ const PATHS = {
   left: 'M15 18l-6-6 6-6',
   right: 'M9 18l6-6-6-6',
   up: 'M18 15l-6-6-6 6',
+  backspace: 'M21 5H8l-6 7 6 7h13a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1zM17 9l-6 6M11 9l6 6',
   down: 'M6 9l6 6 6-6',
   close: 'M18 6 6 18M6 6l12 12',
   lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4',

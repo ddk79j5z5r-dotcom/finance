@@ -277,22 +277,22 @@ export function Entry({ data, tx, preset, onSaved }: { data: Data; tx?: Tx; pres
       {/* Любая операция — «Откуда → Куда». */}
       <div className="acc-picks">
         {mode === 'income'
-          ? <CategoryPicker data={data} kind="income" value={incomeCat} onPick={setIncomeCat} open={incOpen} setOpen={setIncOpen} label="Откуда" />
-          : <AccountPicker data={data} accounts={accounts} value={accountId} onChange={setAccountId} label={mode === 'adjust' ? 'Счёт' : mode === 'refund' ? 'Куда вернули' : 'Откуда'} />}
+          ? <CategoryPicker data={data} kind="income" value={incomeCat} onPick={setIncomeCat} open={incOpen} setOpen={setIncOpen} label="Категория" />
+          : <AccountPicker data={data} accounts={accounts} value={accountId} onChange={setAccountId} label={mode === 'refund' ? 'Куда вернули' : mode === 'transfer' || mode === 'loan' ? 'Откуда' : 'Счёт'} />}
         {mode === 'transfer' && (
           <button type="button" className="swap" aria-label="Поменять счета местами"
             onClick={() => { const a = accountId; setAccountId(toAccountId); setToAccountId(a) }}>⇅</button>
         )}
         {mode === 'expense' && !split && (
-          <CategoryPicker data={data} kind="expense" value={categoryId} onPick={pickCategory} open={catOpen} setOpen={setCatOpen} allowNone noneChosen={noCategory} />
+          <CategoryPicker data={data} kind="expense" value={categoryId} onPick={pickCategory} open={catOpen} setOpen={setCatOpen} allowNone noneChosen={noCategory} label="Категория" />
         )}
-        {mode === 'income' && <AccountPicker data={data} accounts={accounts} value={accountId} onChange={setAccountId} label="Куда" />}
+        {mode === 'income' && <AccountPicker data={data} accounts={accounts} value={accountId} onChange={setAccountId} label="Счёт" />}
         {mode === 'transfer' && <AccountPicker data={data} accounts={toAccounts} value={toAccountId} onChange={setToAccountId} label="Куда" exclude={accountId} />}
-        {mode === 'loan' && <AccountPicker data={data} accounts={credits} value={toAccountId} onChange={setToAccountId} label="Какой кредит" exclude={accountId} />}
+        {mode === 'loan' && <AccountPicker data={data} accounts={credits} value={toAccountId} onChange={setToAccountId} label="Кредит" exclude={accountId} />}
         {mode === 'refund' && (
-          <button type="button" className={original ? 'acc-pick' : 'acc-pick empty'} onClick={() => setRefundPick(true)}>
+          <button type="button" className={original ? 'acc-pick' : 'acc-pick unset'} onClick={() => setRefundPick(true)}>
             {original ? <CatBadge categories={data.categories} c={data.categories.find(c => c.id === original.categoryId)} size={36} /> : <span className="badge tone-transfer" style={{ width: 36, height: 36 }}><Icon name="cart" size={18} /></span>}
-            <span className="body"><span className="k">За какую покупку</span><span className="v">{original ? `${categoryPath(data.categories, original.categoryId) || 'Без категории'} · ${new Date(original.date + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}` : 'Выбери покупку'}</span></span>
+            <span className="body"><span className="k">Покупка</span><span className="v">{original ? `${categoryPath(data.categories, original.categoryId) || 'Без категории'} · ${new Date(original.date + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}` : 'Выбери покупку'}</span></span>
             {original && <span className="bal"><Money v={original.amount} /></span>}
             <Icon name="right" size={18} />
           </button>

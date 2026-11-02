@@ -4,7 +4,7 @@ import { byOrder } from '../domain/categories'
 import { monthLabel, monthOf, plural, shiftMonth, todayISO } from '../domain/money'
 import { INCOME_LABEL, type IncomeKind, type Tx, type TxType } from '../domain/types'
 import { LimitSheet } from './Budget'
-import { Empty, Money, Segmented, Sheet } from './common'
+import { Empty, Money, Sheet } from './common'
 import { rootCategories, type Data } from './data'
 import { Icon } from './icons'
 import { categoryPath } from './Pickers'
@@ -49,7 +49,7 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
   const [type, setType] = useState<TypeFilter>('all')
   const [search, setSearch] = useState('')
   const [limit, setLimit] = useState(150)
-  const [pick, setPick] = useState<'period' | 'account' | 'category' | 'income' | 'tag' | null>(null)
+  const [pick, setPick] = useState<'period' | 'account' | 'category' | 'income' | 'tag' | 'filters' | null>(null)
   const [limitOpen, setLimitOpen] = useState(false)
 
   const slide = useMonthSlide(`${filter.from ?? ''}|${filter.to ?? ''}`)
@@ -84,9 +84,9 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
   const plan = env0 && envelopePlan(env0, subEnvelopes(data.categories, data.limits, data.txs, single!, env0.category.id!))
   const env = env0 && plan && { ...env0, limit: plan.limit, hasLimit: plan.hasLimit, available: plan.limit - env0.spent }
   const catKind = type === 'income' ? 'income' : 'expense'
-  const anyFilter = filter.accountId != null || filter.categoryId != null || filter.incomeKind || filter.noCategory || filter.tag || type !== 'all' || q
   const reset = () => { setFilter({ from: filter.from, to: filter.to }); setType('all'); setSearch('') }
   const acc = filter.accountId != null ? data.accounts.find(a => a.id === filter.accountId) : undefined
+  const filterCount = [filter.accountId != null, filter.categoryId != null || filter.noCategory, filter.tag, filter.incomeKind].filter(Boolean).length
 
   return (
     <div className="page">
@@ -97,32 +97,41 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
         {search && <button className="icon-btn" style={{ marginRight: '-0.6rem' }} aria-label="Очистить поиск" onClick={() => setSearch('')}><Icon name="close" size={14} /></button>}
       </label>
 
-      <div className="month-nav">
-        <button className="icon-btn" aria-label="Предыдущий месяц" disabled={!single} style={{ opacity: single ? 1 : 0.3 }} onClick={() => single && setFilter({ ...filter, from: shiftMonth(single, -1), to: shiftMonth(single, -1) })}><Icon name="left" /></button>
-        <button onClick={() => setPick('period')} aria-label={`Период: ${periodLabel(filter)}. Изменить`}><strong>{periodLabel(filter)}</strong> <Icon name="right" size={12} /></button>
-        <button className="icon-btn" aria-label="Следующий месяц" disabled={!single || single >= monthOf(todayISO())} style={{ opacity: single && single < monthOf(todayISO()) ? 1 : 0.3 }} onClick={() => single && setFilter({ ...filter, from: shiftMonth(single, 1), to: shiftMonth(single, 1) })}><Icon name="right" /></button>
+      <div className="ops-bar">
+        <div className="ops-period">
+          <button className="icon-btn" aria-label="Предыдущий месяц" disabled={!single} style={{ opacity: single ? 1 : 0.3 }} onClick={() => single && setFilter({ ...filter, from: shiftMonth(single, -1), to: shiftMonth(single, -1) })}><Icon name="left" size={16} /></button>
+          <button className="menu-chip" onClick={() => setPick('period')} aria-label={`Период: ${periodLabel(filter)}. Изменить`}>{periodLabel(filter)} <Icon name="down" size={14} /></button>
+          <button className="icon-btn" aria-label="Следующий месяц" disabled={!single || single >= monthOf(todayISO())} style={{ opacity: single && single < monthOf(todayISO()) ? 1 : 0.3 }} onClick={() => single && setFilter({ ...filter, from: shiftMonth(single, 1), to: shiftMonth(single, 1) })}><Icon name="right" size={16} /></button>
+        </div>
+        <button className={filterCount ? 'round-btn accent' : 'round-btn'} aria-label={filterCount ? `Фильтры: ${filterCount}` : 'Фильтры'} onClick={() => setPick('filters')}>
+          <Icon name="filter" size={18} />{filterCount > 0 && <span className="badge-n">{filterCount}</span>}
+        </button>
       </div>
 
-      <Segmented value={type} onChange={v => {
-        setType(v)
-        // Категория другого типа (доход ↔ расход) к новой выборке не подходит.
-        if ((cat && (v === 'transfer' || (v === 'income') !== (cat.kind === 'income'))) || (filter.noCategory && v !== 'expense' && v !== 'all')) setFilter({ ...filter, categoryId: undefined, noCategory: undefined })
-      }} options={[
-        { value: 'all', label: 'Все' }, { value: 'expense', label: 'Расходы' }, { value: 'income', label: 'Доходы' }, { value: 'transfer', label: 'Переводы' },
-      ]} />
-      <div className="chips" style={{ marginBottom: '0.6rem' }}>
-        <button className={acc ? 'chip on' : 'chip'} aria-pressed={!!acc} onClick={() => setPick('account')}><span>{acc?.name ?? 'Все счета'}</span><Icon name="right" size={11} /></button>
-        {type !== 'transfer' && <button className={cat || filter.noCategory ? 'chip on' : 'chip'} aria-pressed={!!cat || !!filter.noCategory} onClick={() => setPick('category')}><span>{cat ? categoryPath(data.categories, cat.id) : filter.noCategory ? 'Без категории' : 'Все категории'}</span><Icon name="right" size={11} /></button>}
-        {(data.settings.tags?.length || filter.tag) && <button className={filter.tag ? 'chip on' : 'chip'} aria-pressed={!!filter.tag} onClick={() => setPick('tag')}><span>{filter.tag ? `#${filter.tag}` : 'Метка'}</span><Icon name="right" size={11} /></button>}
-        {filter.incomeKind && <button className={filter.incomeKind ? 'chip on' : 'chip'} aria-pressed={!!filter.incomeKind} onClick={() => setPick('income')}><span>{filter.incomeKind ? INCOME_LABEL[filter.incomeKind] : 'Вид дохода'}</span><Icon name="right" size={11} /></button>}
-        {anyFilter && <button className="chip clear" onClick={reset}>Сбросить</button>}
+      <div className="pills" role="group" aria-label="Тип операций">
+        {([['all', 'Все'], ['expense', 'Расходы'], ['income', 'Доходы'], ['transfer', 'Переводы']] as const).map(([v, l]) => (
+          <button key={v} className={type === v ? 'on' : undefined} aria-pressed={type === v} onClick={() => {
+            setType(v)
+            // Категория другого типа (доход ↔ расход) к новой выборке не подходит.
+            if ((cat && (v === 'transfer' || (v === 'income') !== (cat.kind === 'income'))) || (filter.noCategory && v !== 'expense' && v !== 'all')) setFilter({ ...filter, categoryId: undefined, noCategory: undefined })
+          }}>{l}</button>
+        ))}
       </div>
+      {filterCount > 0 && (
+        <div className="chips" style={{ marginBottom: '0.5rem' }}>
+          {acc && <button className="chip on" onClick={() => setFilter({ ...filter, accountId: undefined })} aria-label={`Убрать фильтр: ${acc.name}`}><span>{acc.name}</span><Icon name="close" size={11} /></button>}
+          {(cat || filter.noCategory) && <button className="chip on" onClick={() => setFilter({ ...filter, categoryId: undefined, noCategory: undefined })} aria-label="Убрать фильтр категории"><span>{cat ? categoryPath(data.categories, cat.id) : 'Без категории'}</span><Icon name="close" size={11} /></button>}
+          {filter.tag && <button className="chip on" onClick={() => setFilter({ ...filter, tag: undefined })} aria-label="Убрать фильтр метки"><span>#{filter.tag}</span><Icon name="close" size={11} /></button>}
+          {filter.incomeKind && <button className="chip on" onClick={() => setFilter({ ...filter, incomeKind: undefined })}><span>{INCOME_LABEL[filter.incomeKind]}</span><Icon name="close" size={11} /></button>}
+          <button className="chip clear" onClick={reset}>Сбросить всё</button>
+        </div>
+      )}
 
       <div ref={slide}>
-      <div className="trio" aria-live="polite">
-        <div><span className="k">{plural(all.length, ['Операция', 'Операции', 'Операций'])}</span><span className="v">{all.length}</span></div>
-        <div><span className="k">{filter.accountId != null ? 'Ушло' : 'Расход'}</span><span className="v">{totals.out ? '−' : ''}<Money v={totals.out} /></span></div>
-        <div><span className="k">{filter.accountId != null ? 'Пришло' : 'Приход'}</span><span className="v pos"><Money v={totals.in} sign /></span></div>
+      <div className="ops-sum" aria-live="polite">
+        <span>{all.length} {plural(all.length, ['операция', 'операции', 'операций'])}</span>
+        <span>{filter.accountId != null ? 'ушло' : 'расход'} <b>{totals.out ? '−' : ''}<Money v={totals.out} /></b></span>
+        <span>{filter.accountId != null ? 'пришло' : 'приход'} <b className="pos"><Money v={totals.in} sign /></b></span>
       </div>
 
       {env && (
@@ -140,9 +149,9 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
       {[...byDay].map(([day, list]) => {
         const net = list.reduce((s, t) => s - spendRub(t) + (t.type === 'income' ? t.rub : 0), 0)
         return (
-          <section key={day} aria-label={dayTitle(day)}>
-            <div className="day"><span>{dayTitle(day)}</span>{net !== 0 && <span className={net > 0 ? 'pos' : ''}><Money v={net} sign /></span>}</div>
-            <div className="list">{list.map(t => <TxRow key={t.id} data={data} t={t} onOpen={setOpen} />)}</div>
+          <section key={day} className="list day-group" aria-label={dayTitle(day)}>
+            <div className="day-head"><span>{dayTitle(day)}</span>{net !== 0 && <span className={net > 0 ? 'pos' : ''}><Money v={net} sign /></span>}</div>
+            {list.map(t => <TxRow key={t.id} data={data} t={t} onOpen={setOpen} />)}
           </section>
         )
       })}
@@ -167,6 +176,16 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
             ]),
           ]}
           onPick={v => { setFilter({ ...filter, categoryId: v == null || v === -1 ? undefined : v, noCategory: v === -1 || undefined, incomeKind: undefined }); setPick(null) }} />
+      )}
+      {pick === 'filters' && (
+        <Sheet title="Фильтры" onClose={() => setPick(null)}>
+          <div className="list">
+            <button className="row noic" style={{ padding: '0 0.82rem' }} onClick={() => setPick('account')}><span className="body title">Счёт</span><span className="muted">{acc?.name ?? 'Все'}</span><Icon name="right" size={14} /></button>
+            {type !== 'transfer' && <button className="row noic" style={{ padding: '0 0.82rem' }} onClick={() => setPick('category')}><span className="body title">Категория</span><span className="muted">{cat ? categoryPath(data.categories, cat.id) : filter.noCategory ? 'Без категории' : 'Все'}</span><Icon name="right" size={14} /></button>}
+            {(data.settings.tags?.length ?? 0) > 0 && <button className="row noic" style={{ padding: '0 0.82rem' }} onClick={() => setPick('tag')}><span className="body title">Метка</span><span className="muted">{filter.tag ? `#${filter.tag}` : 'Все'}</span><Icon name="right" size={14} /></button>}
+          </div>
+          {filterCount > 0 && <button className="secondary" onClick={() => { reset(); setPick(null) }}>Сбросить фильтры</button>}
+        </Sheet>
       )}
       {pick === 'tag' && (
         <PickSheet title="Метка" value={filter.tag ?? null} onClose={() => setPick(null)}

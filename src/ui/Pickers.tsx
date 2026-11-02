@@ -11,7 +11,7 @@ export function PickRow({ icon, label, value, extra, onClick, empty = false }: {
   icon: ReactNode; label: string; value: string; extra?: ReactNode; onClick: () => void; empty?: boolean
 }) {
   return (
-    <button type="button" className={empty ? 'acc-pick empty' : 'acc-pick'} onClick={onClick} aria-label={`${label}: ${value}`}>
+    <button type="button" className={empty ? 'acc-pick unset' : 'acc-pick'} onClick={onClick} aria-label={`${label}: ${value}`}>
       {icon}
       <span className="body"><span className="k">{label}</span><span className="v">{value}</span></span>
       {extra && <span className="bal">{extra}</span>}
