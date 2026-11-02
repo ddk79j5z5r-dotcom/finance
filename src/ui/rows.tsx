@@ -219,6 +219,43 @@ export function BondEventRow({ e, onOpen }: { e: BondEvent; onOpen?: (e: BondEve
  * Детали планового события. Платёж: «Отметить оплату» создаёт одну операцию; после этого кнопки нет,
  * вместо неё — связанная операция (повторное нажатие не создаёт дубль). Выплата: план отдельно от факта.
  */
+/** Отметить платёж оплаченным в месяце (или снять отметку) — без записи расхода; с отменой. */
+export async function markPaid(id: number, month: string, paid: boolean) {
+  const r = await db.recurring.get(id)
+  if (!r) return
+  const months = new Set(r.paidMonths ?? [])
+  if (paid) months.add(month); else months.delete(month)
+  await db.recurring.update(id, { paidMonths: [...months].sort() })
+  notify(paid ? `«${r.name}» оплачено` : 'Отметка снята', async () => { await db.recurring.update(id, { paidMonths: r.paidMonths ?? [] }) })
+}
+
+/** Обязательный платёж с отметкой «оплачено» справа: касание круга — отметить или снять, строки — подробности. */
+export function PaymentRow({ e, data, onOpen }: { e: Extract<PlannedEvent, { kind: 'payment' }>; data: Data; onOpen: (e: PlannedEvent) => void }) {
+  const r = e.recurring
+  const month = monthOf(e.date)
+  const s = eventStatus(e, data.txs, todayISO(), x => data.toRub(x.amount, x.currency) ?? x.amount)
+  const marked = !!r.paidMonths?.includes(month)
+  const paid = s === 'done'
+  const byTx = paid && !marked // оплата найдена по операции — снимать нечего
+  return (
+    <div className={paid ? 'row pay-row paid' : 'row pay-row'}>
+      <button className="row-main" onClick={() => onOpen(e)}>
+        <CatBadge categories={data.categories} c={data.categories.find(c => c.id === r.categoryId)} size={ICON} />
+        <span className="body">
+          <span className="title">{r.name}</span>
+          <span className="sub">{evDate(e)}{s === 'late' ? <> · <span className="neg">просрочено</span></> : paid ? ' · оплачено' : ''}</span>
+        </span>
+        <span className="amt"><Money v={r.amount} cur={r.currency} whole /></span>
+      </button>
+      <button className={paid ? 'pay-check on' : 'pay-check'} disabled={byTx} aria-pressed={paid}
+        aria-label={paid ? (byTx ? `${r.name}: оплачено по операции` : `${r.name}: оплачено. Снять отметку`) : `Отметить «${r.name}» оплаченным`}
+        onClick={() => markPaid(r.id!, month, !paid)}>
+        {paid && <Icon name="check" size={15} stroke={3} />}
+      </button>
+    </div>
+  )
+}
+
 export function EventSheet({ data, e, onClose, onOpenTx }: { data: Data; e: PlannedEvent; onClose: () => void; onOpenTx: (t: Tx) => void }) {
   const today = todayISO()
   const rubOf = (r: Recurring) => data.toRub(r.amount, r.currency) ?? r.amount
@@ -230,13 +267,8 @@ export function EventSheet({ data, e, onClose, onOpenTx }: { data: Data; e: Plan
   // Отметка — без операции: деньги со счетов не списываются, платёж просто считается оплаченным в этом месяце.
   const setPaid = useOnce(async (paid: boolean) => {
     if (e.kind !== 'payment') return
-    const r = await db.recurring.get(e.recurring.id!)
-    if (!r) return
-    const months = new Set(r.paidMonths ?? [])
-    if (paid) months.add(month); else months.delete(month)
-    await db.recurring.update(r.id!, { paidMonths: [...months].sort() })
     onClose()
-    notify(paid ? `«${r.name}» отмечен оплаченным` : 'Отметка снята', paid ? async () => { await db.recurring.update(r.id!, { paidMonths: r.paidMonths ?? [] }) } : undefined)
+    await markPaid(e.recurring.id!, month, paid)
   })
   return (
     <Sheet title={title} onClose={onClose}>
@@ -250,13 +282,13 @@ export function EventSheet({ data, e, onClose, onOpenTx }: { data: Data; e: Plan
       {e.kind === 'payment' ? (
         marked ? (
           <>
-            <button className="secondary" onClick={() => setPaid(false)}>Снять отметку об оплате</button>
-            <p className="hint">Отмечен оплаченным вручную — расход не записывался, остатки счетов не менялись.</p>
+            <div className="paid-banner"><span className="paid-check"><Icon name="check" size={16} stroke={3} /></span><span><b>Оплачено</b><span>Отмечено вручную — со счетов ничего не списывалось</span></span></div>
+            <button className="link unmark" onClick={() => setPaid(false)}>Снять отметку</button>
           </>
         ) : linked ? (
           <>
+            <div className="paid-banner"><span className="paid-check"><Icon name="check" size={16} stroke={3} /></span><span><b>Оплачено</b><span>Оплата найдена среди операций</span></span></div>
             <button className="secondary" onClick={() => { onClose(); onOpenTx(linked) }}>Связанная операция · <Money v={linked.amount} /></button>
-            <p className="hint">Оплата найдена среди операций — отмечать не нужно.</p>
           </>
         ) : (
           <>

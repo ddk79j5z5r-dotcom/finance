@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { saveSettings } from '../db'
 import type { BondEvent } from '../domain/bonds'
-import { accountKind, envelopes, eventTitle, monthTotals, upcoming, type PlannedEvent } from '../domain/calc'
+import { accountKind, envelopes, eventTitle, monthTotals, plannedInMonth, upcoming, type PlannedEvent } from '../domain/calc'
 import { monthLabel, monthOf, plural, todayISO } from '../domain/money'
 import { availableUntilNextIncome, eventStatus, inTotal } from '../domain/plan'
 import { INCOME_LABEL, type Recurring, type Tx } from '../domain/types'
@@ -9,12 +9,12 @@ import { BondEventSheet } from './Bonds'
 import { BigMoney, Empty, Money, Section, Sheet, setAmountsHidden, useAmountsHidden } from './common'
 import { activeAccounts, type Data } from './data'
 import { Icon } from './icons'
-import { CategoryRow, EventSheet, GoalRow, TxRow, TxSheet, shortDate } from './rows'
+import { CategoryRow, EventSheet, GoalRow, PaymentRow, TxRow, TxSheet, shortDate } from './rows'
 import type { OpsFilter } from './History'
 
 const MONTH_IN = ['январе', 'феврале', 'марте', 'апреле', 'мае', 'июне', 'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре']
 
-export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenBackup, onOpenAccounts, onOpenAnalytics, onOpenOps, onOpenGoals, onOpenPay }: {
+export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenBackup, onOpenAccounts, onOpenAnalytics, onOpenOps, onOpenGoals, onOpenPay, onOpenPlan }: {
   data: Data
   onDistribute: (t: Tx) => void
   onOpenBudget: () => void
@@ -25,6 +25,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
   onOpenOps: (f: OpsFilter) => void
   onOpenGoals: () => void
   onOpenPay: () => void
+  onOpenPlan: () => void
 }) {
   const hidden = useAmountsHidden()
   const today = todayISO()
@@ -102,6 +103,9 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
   const splitTotal = split.life + split.reserve + split.goals
   const pctOf = (v: number) => (splitTotal ? Math.round((v / splitTotal) * 100) : 0)
   const monthIn = MONTH_IN[Number(month.slice(5)) - 1]
+  // Обязательные платежи месяца: отметка «оплачено» прямо здесь, без записи расхода.
+  const payments = plannedInMonth(data.recurring, data.settings, month).filter(e => e.kind === 'payment') as Extract<PlannedEvent, { kind: 'payment' }>[]
+  const paidCount = payments.filter(e => eventStatus(e, data.txs, today, rubOf) === 'done').length
 
   return (
     <div className="page home">
@@ -215,6 +219,15 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
               <span><i className="reserve" />Резерв<b><Money v={split.reserve} whole /></b><em>{pctOf(split.reserve)}%</em></span>
               <span><i className="goals" />Цели<b><Money v={split.goals} whole /></b><em>{pctOf(split.goals)}%</em></span>
             </div>
+          </div>
+        </>
+      )}
+
+      {payments.length > 0 && (
+        <>
+          <Section title="Обязательные платежи" extra={<button className="link" onClick={onOpenPlan}>{paidCount} из {payments.length} оплачено</button>} />
+          <div className="list">
+            {payments.map(e => <PaymentRow key={e.recurring.id} e={e} data={data} onOpen={setEv} />)}
           </div>
         </>
       )}

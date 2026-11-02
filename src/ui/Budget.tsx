@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { db } from '../db'
-import { envelopePlan, envelopes, plannedInMonth, subEnvelopes, type Envelope, type PlannedEvent } from '../domain/calc'
+import { envelopePlan, envelopes, subEnvelopes, type Envelope } from '../domain/calc'
 import { monthLabel, monthOf, plural, shiftMonth, todayISO } from '../domain/money'
 import { INCOME_LABEL, type Category, type Tx } from '../domain/types'
 import { AccountBadge } from './AccountBadge'
@@ -8,7 +8,7 @@ import { AmountInput, BigMoney, Empty, fromInput, Money, Section, Sheet, toInput
 import type { Data } from './data'
 import type { OpsFilter } from './History'
 import { Icon } from './icons'
-import { CategoryRow, EventRow, EventSheet, TxSheet } from './rows'
+import { CategoryRow } from './rows'
 import { useMonthSlide } from './nav'
 
 type Sort = 'spent' | 'left' | 'over'
@@ -20,8 +20,6 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
   const [showIdle, setShowIdle] = useState(false)
   const [opened, setCat] = useState<Envelope | null>(null)
   const [limitFor, setLimitFor] = useState<Category | null>(null)
-  const [ev, setEv] = useState<PlannedEvent | null>(null)
-  const [tx, setTx] = useState<Tx | null>(null)
   const slide = useMonthSlide(month)
 
   // Бюджет основной категории — её лимит, а без него — сумма лимитов подкатегорий; дети не добавляются к лимиту родителя.
@@ -50,7 +48,6 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
 
   const allocated = new Set(data.allocations.map(a => a.txId))
   const pending = data.txs.filter(t => t.type === 'income' && monthOf(t.date) === month && !allocated.has(t.id!))
-  const payments = plannedInMonth(data.recurring, data.settings, month).filter(e => e.kind === 'payment')
   const topups = data.recurring.filter(r => r.active && r.kind === 'topup')
 
   return (
@@ -113,12 +110,6 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
         )}
       </div>
 
-      <Section title="Обязательные платежи" />
-      <div className="list">
-        {payments.length === 0 && <Empty title="Платежей нет">Добавь аренду и кредит в «Ещё → Регулярные платежи».</Empty>}
-        {payments.map(e => <EventRow key={`${e.date}${e.kind === 'payment' ? e.recurring.id : ''}`} e={e} data={data} onOpen={setEv} />)}
-      </div>
-
       {topups.length > 0 && (
         <>
           <Section title="Пополнения копилок" />
@@ -167,8 +158,6 @@ export function Budget({ data, onDistribute, onOpenOps }: { data: Data; onDistri
         )
       })()}
       {limitFor && <LimitSheet data={data} category={limitFor} month={month} onClose={() => setLimitFor(null)} />}
-      {ev && <EventSheet data={data} e={ev} onClose={() => setEv(null)} onOpenTx={setTx} />}
-      {tx && <TxSheet data={data} tx={tx} onClose={() => setTx(null)} />}
     </div>
   )
 }

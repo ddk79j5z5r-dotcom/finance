@@ -101,7 +101,7 @@ export default function App() {
   const screens: Record<Tab, ReactNode> = {
     home: <Home data={data} onDistribute={setDistribute} onOpenBudget={() => switchTo('budget')}
       onOpenCalendar={() => openPage('calendar')} onOpenBackup={() => openSection('backup')} onOpenAccounts={() => openPage('accounts')}
-      onOpenAnalytics={() => openPage('analytics')} onOpenOps={openOps} onOpenGoals={() => openPage('goals')} onOpenPay={() => openSection('pay')} />,
+      onOpenAnalytics={() => openPage('analytics')} onOpenOps={openOps} onOpenGoals={() => openPage('goals')} onOpenPay={() => openSection('pay')} onOpenPlan={() => openPage('plan')} />,
     history: <History data={data} filter={opsFilter} setFilter={setOpsFilter} />,
     budget: <Budget data={data} onDistribute={setDistribute} onOpenOps={openOps} />,
     more: <More data={data} section={section} setSection={setSection} onOpenPage={openPage} />,
