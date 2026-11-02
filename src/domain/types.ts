@@ -165,7 +165,17 @@ export interface Settings {
   advanceDay: number
   expectedSalary: number // ₽, 0 — не задано
   /** Расчёт выплат по окладу (как калькулятор ipipip.ru/kz): если задан, суммы аванса и зарплаты считаются сами. Копейки, ставка — проценты. */
-  pay?: { gross: number; bonus: number; rate: number; deduction: number }
+  pay?: {
+    gross: number
+    /** Надбавки и доплаты — постоянная часть начислений, делится между авансом и зарплатой. */
+    bonus: number
+    rate: number
+    deduction: number
+    /** Премия каждый месяц: процент от оклада или сумма (копейки) до НДФЛ; day 0 — вместе с зарплатой. */
+    premium?: { mode: 'percent' | 'amount'; value: number; day: number }
+    /** Другие ежемесячные выплаты (компенсации и т. п.): сумма до НДФЛ, если taxed, иначе на руки. */
+    extras?: { name: string; amount: number; day: number; taxed: boolean }[]
+  }
   expectedAdvance: number
   defaultAccountId: number | null
   lastExportAt: number | null

@@ -1,6 +1,6 @@
 import type { Trade } from './bonds'
 import { monthOf, shiftMonth } from './money'
-import { expectedPay } from './pay'
+import { expectedPay, extrasForMonth, extraTx } from './pay'
 import type { Account, AccountColor, AccountKind, Category, Goal, IncomeKind, Limit, Recurring, Settings, Tx } from './types'
 import { ACCOUNT_COLORS, REGULAR_INCOME } from './types'
 
@@ -292,9 +292,13 @@ export function netChangeSince(txs: Tx[], fromDate: string): number {
   return s
 }
 
+/** Название планового события для списков. */
+export const eventTitle = (e: PlannedEvent) => e.kind === 'payment' ? e.recurring.name : e.kind === 'extra' ? e.name : e.kind === 'salary' ? 'Зарплата' : 'Аванс'
+
 export type PlannedEvent =
   | { date: string; kind: 'payment'; recurring: Recurring }
   | { date: string; kind: 'salary' | 'advance'; amount: number }
+  | { date: string; kind: 'extra'; name: string; amount: number; premium: boolean; detail: string }
 
 const daysIn = (y: number, m: number) => new Date(y, m, 0).getDate()
 const iso = (y: number, m: number, d: number) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
@@ -306,6 +310,7 @@ export function plannedInMonth(recurring: Recurring[], settings: Settings, month
   const events: PlannedEvent[] = [
     { date: day(settings.salaryDay), kind: 'salary', amount: expectedPay(settings, 'salary', day(settings.salaryDay)) },
     { date: day(settings.advanceDay), kind: 'advance', amount: expectedPay(settings, 'advance', day(settings.advanceDay)) },
+    ...extrasForMonth(settings, month).map(x => ({ date: x.date, kind: 'extra' as const, name: x.name, amount: x.amount, premium: x.premium, detail: x.detail })),
     ...recurring.filter(r => r.active && r.kind !== 'topup').map(r => ({ date: day(r.day), kind: 'payment' as const, recurring: r })),
   ]
   return events.sort((a, b) => a.date.localeCompare(b.date))
@@ -422,7 +427,9 @@ export function monthForecast(
 
   const got = (k: string) => data.txs.some(t => t.type === 'income' && t.incomeKind === k && monthOf(t.date) === month)
   const ev = (k: 'salary' | 'advance') => plannedInMonth([], settings, month).find(e => e.kind === k) as { amount: number } | undefined
+  const extras = plannedInMonth([], settings, month).filter(e => e.kind === 'extra') as Extract<PlannedEvent, { kind: 'extra' }>[]
   const income = totals.income + (got('salary') ? 0 : ev('salary')?.amount ?? 0) + (got('advance') ? 0 : ev('advance')?.amount ?? 0)
+    + extras.filter(e => !extraTx(e, data.txs)).reduce((s, e) => s + e.amount, 0)
   return { income, expense, balance: income - expense, fixedLeft, variablePace }
 }
 

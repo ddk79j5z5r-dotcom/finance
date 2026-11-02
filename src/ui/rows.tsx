@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { db } from '../db'
 import type { BondEvent } from '../domain/bonds'
-import { fxLoss, type Envelope, type GoalProgress, type PlannedEvent } from '../domain/calc'
+import { eventTitle, fxLoss, type Envelope, type GoalProgress, type PlannedEvent } from '../domain/calc'
+import { extraTx } from '../domain/pay'
 import { monthOf, todayISO } from '../domain/money'
 import { eventStatus, incomeTx, paymentTx } from '../domain/plan'
 import { INCOME_LABEL, type Category, type Recurring, type Tx } from '../domain/types'
@@ -197,8 +198,8 @@ export function EventRow({ e, data, onOpen }: { e: PlannedEvent; data: Data; onO
   }
   return (
     <button className="row ev-row" onClick={() => onOpen?.(e)}>
-      <Badge icon="banknote" tone="income" size={ICON} />
-      <span className="body"><span className="title">{e.kind === 'salary' ? 'Зарплата' : 'Аванс'}</span><span className="sub">{evDate(e)}</span></span>
+      <Badge icon={e.kind === 'extra' && e.premium ? 'star' : 'banknote'} tone="income" size={ICON} />
+      <span className="body"><span className="title">{eventTitle(e)}</span><span className="sub">{evDate(e)}{e.kind === 'extra' ? ` · ${e.detail}` : ''}</span></span>
       <span className="tx-right"><span className="amt pos">{e.amount ? <>+<Money v={e.amount} /></> : <span className="sub">сумма не задана</span>}</span><StatusTag s={s} income /></span>
     </button>
   )
@@ -224,8 +225,8 @@ export function EventSheet({ data, e, onClose, onOpenTx }: { data: Data; e: Plan
   const s = eventStatus(e, data.txs, today, rubOf)
   const month = monthOf(e.date)
   const marked = e.kind === 'payment' && !!e.recurring.paidMonths?.includes(month)
-  const linked = e.kind === 'payment' ? (marked ? undefined : paymentTx(e.recurring, data.txs, month, rubOf)) : incomeTx(e.kind, e.date, data.txs)
-  const title = e.kind === 'payment' ? e.recurring.name : e.kind === 'salary' ? 'Зарплата' : 'Аванс'
+  const linked = e.kind === 'payment' ? (marked ? undefined : paymentTx(e.recurring, data.txs, month, rubOf)) : e.kind === 'extra' ? extraTx(e, data.txs) : incomeTx(e.kind, e.date, data.txs)
+  const title = eventTitle(e)
   // Отметка — без операции: деньги со счетов не списываются, платёж просто считается оплаченным в этом месяце.
   const setPaid = useOnce(async (paid: boolean) => {
     if (e.kind !== 'payment') return
@@ -243,6 +244,7 @@ export function EventSheet({ data, e, onClose, onOpenTx }: { data: Data; e: Plan
         <div className="row noic"><span className="body muted">Дата</span><span>{new Date(e.date + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}</span></div>
         <div className="row noic"><span className="body muted">Сумма</span>{e.kind === 'payment' ? <Money v={e.recurring.amount} cur={e.recurring.currency} /> : e.amount ? <Money v={e.amount} /> : <span className="muted">не задана</span>}</div>
         <div className="row noic"><span className="body muted">Статус</span><StatusTag s={s} income={e.kind !== 'payment'} /></div>
+        {e.kind === 'extra' && <div className="row noic"><span className="body muted">Расчёт</span><span className="title wrap" style={{ textAlign: 'right', maxWidth: '65%' }}>{e.detail}</span></div>}
         {e.kind === 'payment' && e.recurring.reserveAccountId != null && <div className="row noic"><span className="body muted">Копится на</span><span>{data.accounts.find(a => a.id === e.recurring.reserveAccountId)?.name}</span></div>}
       </div>
       {e.kind === 'payment' ? (
@@ -268,7 +270,7 @@ export function EventSheet({ data, e, onClose, onOpenTx }: { data: Data; e: Plan
           <p className="hint">Поступление записано.</p>
         </>
       ) : (
-        <p className="hint">Плановое поступление: в расчётах это ещё не деньги. Когда придёт — запиши доход через «+».</p>
+        <p className="hint">Плановое поступление: в расчётах это ещё не деньги. Когда придёт — запиши доход через «+»{e.kind === 'extra' ? ` с комментарием «${e.name}»${e.premium ? ' или в категории «Премия»' : ''} — тогда выплата отметится полученной` : ''}.</p>
       )}
     </Sheet>
   )

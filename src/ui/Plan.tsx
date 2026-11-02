@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { plannedInMonth, type PlannedEvent } from '../domain/calc'
+import { eventTitle, plannedInMonth, type PlannedEvent } from '../domain/calc'
+import { extraTx } from '../domain/pay'
 import { monthLabel, monthOf, shiftMonth, todayISO } from '../domain/money'
 import { eventStatus, incomeTx } from '../domain/plan'
 import type { Recurring, Tx } from '../domain/types'
@@ -22,7 +23,7 @@ export function Plan({ data }: { data: Data }) {
   const rubOf = (r: Recurring) => data.toRub(r.amount, r.currency) ?? r.amount
   const events = plannedInMonth(data.recurring, data.settings, month)
   const payments = events.filter(e => e.kind === 'payment') as Extract<PlannedEvent, { kind: 'payment' }>[]
-  const incomes = events.filter(e => e.kind !== 'payment') as Extract<PlannedEvent, { kind: 'salary' | 'advance' }>[]
+  const incomes = events.filter(e => e.kind !== 'payment') as Exclude<PlannedEvent, { kind: 'payment' }>[]
   const status = (e: PlannedEvent) => eventStatus(e, data.txs, today, rubOf)
   const total = payments.reduce((s, e) => s + rubOf(e.recurring), 0)
   const paid = payments.filter(e => status(e) === 'done').reduce((s, e) => s + rubOf(e.recurring), 0)
@@ -71,19 +72,19 @@ export function Plan({ data }: { data: Data }) {
         <Section title="Поступления на месяц" extra={expected ? <span className="small muted">всего <Money v={expected} whole /></span> : undefined} />
         <div className="list">
           {incomes.map(e => {
-            const got = incomeTx(e.kind, e.date, data.txs)
+            const got = e.kind === 'extra' ? extraTx(e, data.txs) : incomeTx(e.kind, e.date, data.txs)
             const pct = e.amount > 0 ? Math.min(100, ((got?.rub ?? 0) / e.amount) * 100) : got ? 100 : 0
             return (
-              <button key={e.kind} className="row inc-row" style={{ padding: '0.5rem 0.82rem' }} onClick={() => setEv(e)}>
+              <button key={e.kind === 'extra' ? e.name + e.date : e.kind} className="row inc-row" style={{ padding: '0.5rem 0.82rem' }} onClick={() => setEv(e)}>
                 <span className="body">
-                  <span className="goal-line"><span className="title">{e.kind === 'salary' ? 'Зарплата' : 'Аванс'} <span className="muted small">{new Date(e.date + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</span></span>
+                  <span className="goal-line"><span className="title">{eventTitle(e)} <span className="muted small">{new Date(e.date + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</span></span>
                     <span className="cat-amt">{e.amount ? <Money v={e.amount} whole /> : 'сумма не задана'}</span></span>
                   <span className="goal-line"><span className="bar"><span className="fill" style={{ display: 'block', width: `${pct}%`, background: 'var(--pos)' }} /></span><span className="pct">{got ? 'пришло' : 'ожидается'}</span></span>
                 </span>
               </button>
             )
           })}
-          {expected === 0 && <p className="hint" style={{ padding: '0 0.82rem 0.6rem' }}>Ожидаемые суммы зарплаты и аванса задаются в «Ещё → Выплаты». Плановые поступления не прибавляются к балансу, пока не придут.</p>}
+          {expected === 0 && <p className="hint" style={{ padding: '0 0.82rem 0.6rem' }}>Суммы зарплаты, аванса, премии и других выплат задаются в «Ещё → Выплаты». Плановые поступления не прибавляются к балансу, пока не придут.</p>}
         </div>
 
         <Section title="Запланированные платежи" action="Изменить" onAction={() => setEdit('all')} />

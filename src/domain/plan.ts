@@ -1,5 +1,6 @@
 import { accountKind, isPaid, upcoming, type PlannedEvent } from './calc'
 import { monthOf } from './money'
+import { extraTx } from './pay'
 import type { Account, Recurring, Settings, Tx } from './types'
 
 // ---------- «Доступно до следующего дохода» и статусы плановых событий ----------
@@ -30,6 +31,7 @@ export function eventStatus(e: PlannedEvent, txs: Tx[], today: string, rubOf: (r
     if (isPaid(e.recurring, txs, monthOf(e.date), rubOf)) return 'done'
     return e.date < today ? 'late' : 'wait'
   }
+  if (e.kind === 'extra') return extraTx(e, txs) ? 'done' : 'plan'
   return incomeReceived(e.kind, e.date, txs) ? 'done' : 'plan'
 }
 

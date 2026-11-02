@@ -93,7 +93,7 @@ export function Calendar({ data }: { data: Data }) {
       </div>
       <div className="list">
         {list.length === 0 && listBond.length === 0 && <Empty title="Ничего не запланировано">{mode === 'day' ? 'В этот день платежей и поступлений нет.' : 'В этом месяце нет плановых событий.'}</Empty>}
-        {[...list.map(e => ({ date: e.date, el: <EventRow key={`p${e.date}${e.kind === 'payment' ? e.recurring.id : e.kind}`} e={e} data={data} onOpen={setEv} /> })),
+        {[...list.map(e => ({ date: e.date, el: <EventRow key={`p${e.date}${e.kind === 'payment' ? e.recurring.id : e.kind === 'extra' ? e.name : e.kind}`} e={e} data={data} onOpen={setEv} /> })),
           ...listBond.map(e => ({ date: e.date, el: <BondEventRow key={e.key} e={e} onOpen={setBond} /> }))]
           .sort((a, b) => a.date.localeCompare(b.date)).map(x => x.el)}
       </div>

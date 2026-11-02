@@ -468,14 +468,17 @@ button, .row-main, label.chip, .date-chip { transition: transform .2s cubic-bezi
 .hero-total-v { display: inline-flex; align-items: center; gap: 0.2rem; color: var(--text); font-size: 1.12rem; font-weight: 700; letter-spacing: -0.015em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .hero-total-v svg { color: var(--muted); }
 
-.timeline { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; gap: 0.3rem; padding: 0.2rem 0.1rem 0.9rem; text-align: left; }
+.timeline-scroll { overflow-x: auto; margin: 0 -1rem; padding: 0 1rem; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.timeline-scroll::-webkit-scrollbar { display: none; }
+/* Шкала месяца: колонка на событие, при большом числе событий — прокрутка вбок */
+.timeline { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 6.6rem; width: max-content; min-width: 100%; gap: 0.5rem; padding: 0.2rem 0.1rem 0.9rem; text-align: left; }
 .tl-line { position: absolute; left: 0.45rem; right: 0.45rem; top: calc(0.2rem + 5px); height: 2px; border-radius: 1px; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 35%, var(--s3))); }
 .tl-pt { position: relative; display: flex; flex-direction: column; min-width: 0; font-size: 0.706rem; color: var(--text-2); }
 .tl-pt i { width: 12px; height: 12px; border-radius: 50%; background: var(--bg); border: 2.5px solid var(--accent); margin-bottom: 0.45rem; }
 .tl-pt.now i { background: var(--accent); }
 .tl-pt i.out { border-color: var(--neg); }
 .tl-pt i.in { border-color: var(--pos); }
-.tl-pt b { color: var(--text); font-weight: 600; font-size: 0.765rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-pt b { color: var(--text); font-weight: 600; font-size: 0.765rem; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .tl-pt .d { color: var(--muted); }
 .tl-pt .v { margin-top: 0.15rem; font-weight: 650; font-size: 0.765rem; color: var(--text); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .tl-pt .v.pos { color: var(--pos); } .tl-pt .v.neg { color: var(--neg); }
@@ -611,3 +614,7 @@ button, .row-main, label.chip, .date-chip { transition: transform .2s cubic-bezi
 .pay-calc { display: flex; flex-direction: column; gap: 0.7rem; margin-top: 0.8rem; }
 .pay-block p { margin: 0.2rem 0 0; font-size: 0.765rem; color: var(--text-2); line-height: 1.45; }
 .pay-block b { font-size: 0.941rem; }
+.extra-row { display: flex; flex-direction: column; gap: 0.45rem; padding: 0.7rem 0.82rem; }
+.extra-row + .extra-row { border-top: 1px solid var(--sep); }
+.extra-line { display: grid; grid-template-columns: minmax(0, 1fr) 5.2rem auto; gap: 0.45rem; align-items: center; }
+.timeline > .tl-pt { max-width: 6.6rem; }

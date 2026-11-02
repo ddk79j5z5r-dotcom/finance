@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { saveSettings } from '../db'
 import type { BondEvent } from '../domain/bonds'
-import { accountKind, envelopes, monthTotals, upcoming, type PlannedEvent } from '../domain/calc'
+import { accountKind, envelopes, eventTitle, monthTotals, upcoming, type PlannedEvent } from '../domain/calc'
 import { monthLabel, monthOf, plural, todayISO } from '../domain/money'
 import { availableUntilNextIncome, eventStatus, inTotal } from '../domain/plan'
 import { INCOME_LABEL, type Recurring, type Tx } from '../domain/types'
@@ -69,13 +69,21 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
       if (e.kind !== 'payment' && e.amount <= 0 && e.kind !== avail?.next.kind) continue
       byDate.set(e.date, [...(byDate.get(e.date) ?? []), e])
     }
-    return [...byDate].sort(([a], [b]) => a.localeCompare(b)).slice(0, 3).map(([date, evs]) => {
-      const income = evs.find(e => e.kind !== 'payment') as { kind: 'salary' | 'advance'; amount: number } | undefined
+    // Поступления и платежи одного дня — отдельными точками: плюс и минус не смешиваются в одну сумму.
+    const pts: { key: string; date: string; label: string; sum: number; known: boolean }[] = []
+    for (const [date, evs] of [...byDate].sort(([a], [b]) => a.localeCompare(b))) {
+      const incomes = evs.filter(e => e.kind !== 'payment') as Exclude<PlannedEvent, { kind: 'payment' }>[]
       const pays = evs.filter(e => e.kind === 'payment') as { recurring: Recurring }[]
-      const sum = (income?.amount ?? 0) - pays.reduce((s, e) => s + rubOf(e.recurring), 0)
-      const label = income ? INCOME_LABEL[income.kind] : pays.length === 1 ? pays[0].recurring.name : 'Платежи'
-      return { date, label, sum, known: !income || income.amount > 0 }
-    })
+      if (incomes.length) {
+        // Зарплата и премия в один день — одной точкой: «Зарплата + премия».
+        const main = incomes.find(e => e.kind !== 'extra') ?? incomes[0]
+        const rest = incomes.filter(e => e !== main)
+        const label = eventTitle(main) + (rest.length === 1 ? ` + ${eventTitle(rest[0]).toLowerCase()}` : rest.length > 1 ? ` + ещё ${rest.length}` : '')
+        pts.push({ key: `${date}+`, date, label, sum: incomes.reduce((s, e) => s + e.amount, 0), known: incomes.every(e => e.amount > 0) })
+      }
+      if (pays.length) pts.push({ key: `${date}-`, date, label: pays.length === 1 ? pays[0].recurring.name : `Платежи · ${pays.length}`, sum: -pays.reduce((s, e) => s + rubOf(e.recurring), 0), known: true })
+    }
+    return pts
   })()
 
   // Распределение собственных денег: на жизнь (карты), цели (накопленное на копилках с целью), резерв (остальное).
@@ -132,6 +140,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
       </section>
 
       {timeline.length > 0 && (
+        <div className="timeline-scroll">
         <button className="timeline" onClick={onOpenCalendar} aria-label="Ближайшие поступления и платежи. Открыть календарь">
           <span className="tl-line" aria-hidden="true" />
           <span className="tl-pt now">
@@ -141,7 +150,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
             {avail && <span className="v"><Money v={avail.total} whole /></span>}
           </span>
           {timeline.map(p => (
-            <span className="tl-pt" key={p.date}>
+            <span className="tl-pt" key={p.key}>
               <i className={p.sum < 0 ? 'out' : 'in'} />
               <b>{p.label}</b>
               <span className="d">{shortDate(p.date)}</span>
@@ -149,6 +158,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
             </span>
           ))}
         </button>
+        </div>
       )}
 
       {(pending.length > 0 || data.pendingBond.length > 0 || exportStale) && (
