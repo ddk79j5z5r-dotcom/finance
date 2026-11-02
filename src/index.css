@@ -606,3 +606,8 @@ button, .row-main, label.chip, .date-chip { transition: transform .2s cubic-bezi
 @media (prefers-color-scheme: light) { .key { background: #fff; } .key.op { background: #d1d3d9; } .keypad { background: #e3e4e8; } }
 .goal-actions .link { font-size: 0.824rem; font-weight: 600; }
 .cal button { gap: 5px; }
+
+/* Расчёт выплат по окладу */
+.pay-calc { display: flex; flex-direction: column; gap: 0.7rem; margin-top: 0.8rem; }
+.pay-block p { margin: 0.2rem 0 0; font-size: 0.765rem; color: var(--text-2); line-height: 1.45; }
+.pay-block b { font-size: 0.941rem; }

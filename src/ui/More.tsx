@@ -3,9 +3,10 @@ import { db, saveSettings } from '../db'
 import { refreshLatestRate } from '../domain/rates'
 import { CURRENCIES, type Category, type Currency, type Recurring } from '../domain/types'
 import { disableLock, enrollFaceId, faceIdSupported, getLock, isLockEnabled, setPin } from '../lock'
-import { AmountInput, Bar, Chips, CUR_SUFFIX, fromInput, Money, Section, Sheet, toInput, useOnce } from './common'
-import { plural } from '../domain/money'
-import { setupSteps } from '../domain/calc'
+import { AmountInput, Bar, Chips, CUR_SUFFIX, fromInput, Money, Section, Segmented, Sheet, toInput, useOnce } from './common'
+import { monthOf, plural, shiftMonth, todayISO } from '../domain/money'
+import { plannedInMonth, setupSteps } from '../domain/calc'
+import { ADVANCE_LAST_DAY, hasOfficialCalendar, payForMonth, payMonthFor } from '../domain/pay'
 import { rateHint, type Data } from './data'
 import { Icon, type IconName } from './icons'
 import { ImportCk } from './ImportCk'
@@ -113,6 +114,7 @@ export function More({ data, section, setSection, onOpenPage }: {
         ) : <p className="hint" style={{ padding: '0.5rem 0.82rem', margin: 0 }}>Курсов ещё нет — нужен интернет.</p>}
       </div>
       <p className="hint">{rateHint(r)} — по нему валютные счета переводятся в рубли.</p>
+      <p className="hint" style={{ textAlign: 'center', marginTop: '1.2rem' }}>Версия от {new Date(__BUILD_TIME__).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</p>
 
       {section && (
         <Sheet title={SECTIONS.find(s => s.id === section)!.label} onClose={() => setSection(null)}>
@@ -129,31 +131,100 @@ export function More({ data, section, setSection, onOpenPage }: {
   )
 }
 
+const RATES = [13, 15, 18, 20, 22, 30, 0]
+
+/** Выплаты: дни и суммы. Суммы — вручную или по окладу с НДФЛ и рабочими днями, как в калькуляторе ipipip.ru/kz. */
 function PaySection({ data, onDone }: { data: Data; onDone: () => void }) {
   const s = data.settings
   const [salaryDay, setSalaryDay] = useState(String(s.salaryDay))
   const [advanceDay, setAdvanceDay] = useState(String(s.advanceDay))
+  const [mode, setMode] = useState<'calc' | 'manual'>(s.pay?.gross ? 'calc' : 'manual')
   const [salary, setSalary] = useState(toInput(s.expectedSalary))
   const [advance, setAdvance] = useState(toInput(s.expectedAdvance))
+  const [gross, setGross] = useState(toInput(s.pay?.gross))
+  const [bonus, setBonus] = useState(toInput(s.pay?.bonus))
+  const [rate, setRate] = useState(s.pay?.rate ?? 13)
+  const [deduction, setDeduction] = useState(toInput(s.pay?.deduction))
   const day = (v: string) => Math.min(31, Math.max(1, Number(v) || 1))
+  const pay = { gross: fromInput(gross) ?? 0, bonus: fromInput(bonus) ?? 0, rate, deduction: fromInput(deduction) ?? 0 }
+  // Ближайшие выплаты по введённым данным — сразу, до сохранения.
+  const preview = mode === 'calc' && pay.gross > 0
+    ? plannedInMonth([], { ...s, salaryDay: day(salaryDay), advanceDay: day(advanceDay), pay }, monthOf(todayISO()))
+      .concat(plannedInMonth([], { ...s, salaryDay: day(salaryDay), advanceDay: day(advanceDay), pay }, shiftMonth(monthOf(todayISO()), 1)))
+      .filter(e => e.kind !== 'payment' && e.date >= todayISO()).slice(0, 2) as { date: string; kind: 'salary' | 'advance'; amount: number }[]
+    : []
+  const save = useOnce(async () => {
+    await saveSettings({
+      salaryDay: day(salaryDay), advanceDay: day(advanceDay),
+      expectedSalary: fromInput(salary) ?? 0, expectedAdvance: fromInput(advance) ?? 0,
+      pay: mode === 'calc' && pay.gross > 0 ? pay : undefined,
+    })
+    onDone()
+  })
+  const r = (v: number) => <Money v={v} whole />
   return (
     <>
       <div className="row2">
-        <div><label className="field-label">Зарплата, число</label><input inputMode="numeric" value={salaryDay} onChange={e => setSalaryDay(e.target.value)} /></div>
-        <div><label className="field-label">Аванс, число</label><input inputMode="numeric" value={advanceDay} onChange={e => setAdvanceDay(e.target.value)} /></div>
+        <div><label className="field-label" htmlFor="sal-day">Зарплата, число</label><input id="sal-day" inputMode="numeric" value={salaryDay} onChange={e => setSalaryDay(e.target.value)} /></div>
+        <div><label className="field-label" htmlFor="adv-day">Аванс, число</label><input id="adv-day" inputMode="numeric" value={advanceDay} onChange={e => setAdvanceDay(e.target.value)} /></div>
       </div>
-      <label className="field-label">Ожидаемая зарплата</label>
-      <AmountInput value={salary} onChange={setSalary} suffix="₽" />
-      <label className="field-label">Ожидаемый аванс</label>
-      <AmountInput value={advance} onChange={setAdvance} suffix="₽" />
-      <p className="hint">Нужно для прогноза на месяц и календаря. Когда выплата придёт, в расчёт пойдёт фактическая сумма.</p>
-      <button className="save" onClick={async () => {
-        await saveSettings({ salaryDay: day(salaryDay), advanceDay: day(advanceDay), expectedSalary: fromInput(salary) ?? 0, expectedAdvance: fromInput(advance) ?? 0 })
-        onDone()
-      }}>Сохранить</button>
+      <label className="field-label">Суммы</label>
+      <Segmented value={mode} onChange={setMode} options={[{ value: 'calc', label: 'По окладу' }, { value: 'manual', label: 'Вручную' }]} />
+      {mode === 'manual' ? (
+        <>
+          <label className="field-label">Ожидаемая зарплата</label>
+          <AmountInput value={salary} onChange={setSalary} suffix="₽" />
+          <label className="field-label">Ожидаемый аванс</label>
+          <AmountInput value={advance} onChange={setAdvance} suffix="₽" />
+          <p className="hint">Нужно для прогноза на месяц и календаря. Когда выплата придёт, в расчёт пойдёт фактическая сумма.</p>
+        </>
+      ) : (
+        <>
+          <label className="field-label">Оклад в месяц, до вычета НДФЛ</label>
+          <AmountInput value={gross} onChange={setGross} suffix="₽" />
+          <label className="field-label">Надбавки и премии в месяц <span className="muted">(если постоянные)</span></label>
+          <AmountInput value={bonus} onChange={setBonus} suffix="₽" placeholder="0" />
+          <div className="row2">
+            <div>
+              <label className="field-label" htmlFor="ndfl">НДФЛ</label>
+              <select id="ndfl" value={rate} onChange={e => setRate(Number(e.target.value))}>
+                {RATES.map(x => <option key={x} value={x}>{x}%{x === 13 ? ' — обычный' : x === 0 ? ' — без налога' : ''}</option>)}
+              </select>
+            </div>
+            <div><label className="field-label">Вычеты в месяц</label><AmountInput value={deduction} onChange={setDeduction} suffix="₽" placeholder="0" /></div>
+          </div>
+          <p className="hint">Вычеты — например, на ребёнка 1 400 ₽: уменьшают базу для налога.</p>
+          {preview.length > 0 && (
+            <div className="card pay-calc">
+              {preview.map(e => {
+                const c = payForMonth(pay, payMonthFor(e.kind, e.date, { salaryDay: day(salaryDay), advanceDay: day(advanceDay) }))
+                const half = `1–${ADVANCE_LAST_DAY} ${monthGen(c.month)}`
+                return (
+                  <div key={e.kind + e.date} className="pay-block">
+                    <div className="line" style={{ padding: 0 }}><b>{e.kind === 'advance' ? 'Аванс' : 'Зарплата'} {shortDay(e.date)}</b><b className="pos">{r(e.amount)}</b></div>
+                    {e.kind === 'advance' ? (
+                      <p>За {half}: {r(c.accrued)} × {c.halfDays} раб. дн. ÷ {c.days} раб. дн. = {r(c.advanceGross)} − НДФЛ {r(c.advanceTax)}</p>
+                    ) : (
+                      <p>За {monthNom(c.month)}: начислено {r(c.accrued)} − НДФЛ {r(c.tax)} = {r(c.net)} на руки, минус аванс {r(c.advance)}</p>
+                    )}
+                  </div>
+                )
+              })}
+              <p className="hint" style={{ margin: 0 }}>Рабочие дни — по производственному календарю{!hasOfficialCalendar(Number(preview[0].date.slice(0, 4))) ? ' (для этого года — по общему правилу, может отличаться от постановления)' : ''}. Аванс — за 1–{ADVANCE_LAST_DAY} число месяца. Больничные, отпуск и неполный месяц не учитываются — такая выплата придёт меньше, в расчёт пойдёт фактическая сумма.</p>
+            </div>
+          )}
+        </>
+      )}
+      <button className="save" onClick={save}>Сохранить</button>
     </>
   )
 }
+
+const GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+const NOM = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь']
+const monthGen = (ym: string) => GEN[Number(ym.slice(5)) - 1]
+const monthNom = (ym: string) => NOM[Number(ym.slice(5)) - 1]
+const shortDay = (d: string) => `${Number(d.slice(8))} ${GEN[Number(d.slice(5, 7)) - 1].slice(0, 3)}.`
 
 /** Метки операций: несколько на одну операцию, фильтр в истории и аналитике. */
 function TagsSection({ data }: { data: Data }) {

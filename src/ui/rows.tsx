@@ -6,7 +6,7 @@ import { monthOf, todayISO } from '../domain/money'
 import { eventStatus, incomeTx, paymentTx } from '../domain/plan'
 import { INCOME_LABEL, type Category, type Recurring, type Tx } from '../domain/types'
 import { AccountBadge } from './AccountBadge'
-import { AmountInput, Money, Sheet, StatusTag, fromInput, toInput, useOnce, useAmountsHidden } from './common'
+import { Money, Sheet, StatusTag, useOnce, useAmountsHidden } from './common'
 import type { Data } from './data'
 import { Entry, transferMeaning } from './Entry'
 import { Badge, CatBadge, categoryIcon, categoryLook, Icon, INCOME_ICON } from './icons'
@@ -199,7 +199,7 @@ export function EventRow({ e, data, onOpen }: { e: PlannedEvent; data: Data; onO
     <button className="row ev-row" onClick={() => onOpen?.(e)}>
       <Badge icon="banknote" tone="income" size={ICON} />
       <span className="body"><span className="title">{e.kind === 'salary' ? 'Зарплата' : 'Аванс'}</span><span className="sub">{evDate(e)}</span></span>
-      <span className="tx-right"><span className="amt pos">{e.amount ? <>+<Money v={e.amount} /></> : <span className="sub">сумма не задана</span>}</span><StatusTag s={s} /></span>
+      <span className="tx-right"><span className="amt pos">{e.amount ? <>+<Money v={e.amount} /></> : <span className="sub">сумма не задана</span>}</span><StatusTag s={s} income /></span>
     </button>
   )
 }
@@ -222,26 +222,51 @@ export function EventSheet({ data, e, onClose, onOpenTx }: { data: Data; e: Plan
   const today = todayISO()
   const rubOf = (r: Recurring) => data.toRub(r.amount, r.currency) ?? r.amount
   const s = eventStatus(e, data.txs, today, rubOf)
-  const linked = e.kind === 'payment' ? paymentTx(e.recurring, data.txs, monthOf(e.date), rubOf) : incomeTx(e.kind, e.date, data.txs)
-  const [paying, setPaying] = useState(false)
+  const month = monthOf(e.date)
+  const marked = e.kind === 'payment' && !!e.recurring.paidMonths?.includes(month)
+  const linked = e.kind === 'payment' ? (marked ? undefined : paymentTx(e.recurring, data.txs, month, rubOf)) : incomeTx(e.kind, e.date, data.txs)
   const title = e.kind === 'payment' ? e.recurring.name : e.kind === 'salary' ? 'Зарплата' : 'Аванс'
-  // Оплата учитывается в месяце платежа: в этом месяце — сегодняшним днём, в другом — днём платежа.
-  if (paying && e.kind === 'payment') return <PaySheet data={data} r={e.recurring} date={monthOf(e.date) === monthOf(today) ? today : e.date} onClose={onClose} />
+  // Отметка — без операции: деньги со счетов не списываются, платёж просто считается оплаченным в этом месяце.
+  const setPaid = useOnce(async (paid: boolean) => {
+    if (e.kind !== 'payment') return
+    const r = await db.recurring.get(e.recurring.id!)
+    if (!r) return
+    const months = new Set(r.paidMonths ?? [])
+    if (paid) months.add(month); else months.delete(month)
+    await db.recurring.update(r.id!, { paidMonths: [...months].sort() })
+    onClose()
+    notify(paid ? `«${r.name}» отмечен оплаченным` : 'Отметка снята', paid ? async () => { await db.recurring.update(r.id!, { paidMonths: r.paidMonths ?? [] }) } : undefined)
+  })
   return (
     <Sheet title={title} onClose={onClose}>
       <div className="list">
         <div className="row noic"><span className="body muted">Дата</span><span>{new Date(e.date + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}</span></div>
         <div className="row noic"><span className="body muted">Сумма</span>{e.kind === 'payment' ? <Money v={e.recurring.amount} cur={e.recurring.currency} /> : e.amount ? <Money v={e.amount} /> : <span className="muted">не задана</span>}</div>
-        <div className="row noic"><span className="body muted">Статус</span><StatusTag s={s} /></div>
+        <div className="row noic"><span className="body muted">Статус</span><StatusTag s={s} income={e.kind !== 'payment'} /></div>
         {e.kind === 'payment' && e.recurring.reserveAccountId != null && <div className="row noic"><span className="body muted">Копится на</span><span>{data.accounts.find(a => a.id === e.recurring.reserveAccountId)?.name}</span></div>}
       </div>
-      {linked ? (
+      {e.kind === 'payment' ? (
+        marked ? (
+          <>
+            <button className="secondary" onClick={() => setPaid(false)}>Снять отметку об оплате</button>
+            <p className="hint">Отмечен оплаченным вручную — расход не записывался, остатки счетов не менялись.</p>
+          </>
+        ) : linked ? (
+          <>
+            <button className="secondary" onClick={() => { onClose(); onOpenTx(linked) }}>Связанная операция · <Money v={linked.amount} /></button>
+            <p className="hint">Оплата найдена среди операций — отмечать не нужно.</p>
+          </>
+        ) : (
+          <>
+            <button className="save" onClick={() => setPaid(true)}>Отметить оплату</button>
+            <p className="hint">Только отметка: со счетов ничего не списывается.</p>
+          </>
+        )
+      ) : linked ? (
         <>
-          <button className="secondary" onClick={() => { onClose(); onOpenTx(linked) }}>Связанная операция · <Money v={linked.amount} /></button>
-          <p className="hint">{e.kind === 'payment' ? 'Платёж отмечен — повторная операция не создаётся.' : 'Поступление записано.'}</p>
+          <button className="secondary" onClick={() => { onClose(); onOpenTx(linked) }}>Поступление · <Money v={linked.amount} /></button>
+          <p className="hint">Поступление записано.</p>
         </>
-      ) : e.kind === 'payment' ? (
-        <button className="save" onClick={() => setPaying(true)}>Отметить оплату</button>
       ) : (
         <p className="hint">Плановое поступление: в расчётах это ещё не деньги. Когда придёт — запиши доход через «+».</p>
       )}
@@ -249,35 +274,6 @@ export function EventSheet({ data, e, onClose, onOpenTx }: { data: Data; e: Plan
   )
 }
 
-/** Оплата регулярного платежа: создаёт расход с его категорией и названием (по ним платёж и считается оплаченным). */
-export function PaySheet({ data, r, date, onClose }: { data: Data; r: Recurring; date?: string; onClose: () => void }) {
-  const accounts = data.accounts.filter(a => !a.archived && a.currency === r.currency)
-  const [accountId, setAccountId] = useState(
-    accounts.find(a => a.id === r.reserveAccountId)?.id ?? accounts.find(a => a.id === data.settings.defaultAccountId)?.id ?? accounts[0]?.id,
-  )
-  const [value, setValue] = useState(toInput(r.amount))
-  const save = useOnce(async () => {
-    const amount = fromInput(value)
-    if (!amount || accountId == null) return
-    if (paymentTx(r, data.txs, monthOf(date ?? todayISO()), x => data.toRub(x.amount, x.currency) ?? x.amount)) { onClose(); return }
-    const rub = r.currency === 'RUB' ? amount : data.toRub(amount, r.currency)
-    if (rub == null) return
-    await db.txs.add({ date: date ?? todayISO(), type: 'expense', accountId, amount, rub, categoryId: r.categoryId, comment: r.name, createdAt: Date.now() })
-    notify('Оплата записана')
-    onClose()
-  })
-  return (
-    <Sheet title={`Оплата: ${r.name}`} onClose={onClose}>
-      <AmountInput value={value} onChange={setValue} big />
-      <label className="field-label">Со счёта</label>
-      <select value={accountId ?? ''} onChange={e => setAccountId(Number(e.target.value))}>
-        {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-      </select>
-      {accounts.length === 0 && <p className="error">Нет счёта в валюте платежа</p>}
-      <button className="save" onClick={save} disabled={accounts.length === 0}>Записать расход</button>
-    </Sheet>
-  )
-}
 
 // ---------- Категория бюджета ----------
 

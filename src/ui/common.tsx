@@ -224,8 +224,8 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
 export type Status = 'done' | 'late' | 'wait' | 'plan'
 export const STATUS_LABEL: Record<Status, string> = { done: 'выполнено', late: 'просрочено', wait: 'ожидается', plan: 'плановое' }
 /** Статус события — текстом, цвет только помогает. */
-export function StatusTag({ s }: { s: Status }) {
-  return <span className={`st ${s}`}>{STATUS_LABEL[s]}</span>
+export function StatusTag({ s, income = false }: { s: Status; income?: boolean }) {
+  return <span className={`st ${s}`}>{s === 'done' ? (income ? 'пришло' : 'оплачено') : STATUS_LABEL[s]}</span>
 }
 
 /** Поле суммы: хранит строку, наружу отдаёт копейки через fromInput. */

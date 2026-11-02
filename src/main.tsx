@@ -10,7 +10,18 @@ import { refreshLatestRate } from './domain/rates'
 import { seedIfEmpty } from './domain/seed'
 import './index.css'
 
-registerSW({ immediate: true })
+// Обновления: приложение с экрана «Домой» на iPhone само новую версию почти не проверяет — просыпается из памяти
+// без перезагрузки. Поэтому проверяем при каждом возврате в приложение и раз в полчаса; новая версия
+// сразу берёт управление и страница перезагружается (registerType: 'autoUpdate').
+registerSW({
+  immediate: true,
+  onRegisteredSW(_url, reg) {
+    if (!reg) return
+    const check = () => { if (navigator.onLine) reg.update().catch(() => {}) }
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) check() })
+    setInterval(check, 30 * 60 * 1000)
+  },
+})
 trackVisualViewport()
 trackPress()
 

@@ -1,5 +1,6 @@
 import type { Trade } from './bonds'
 import { monthOf, shiftMonth } from './money'
+import { expectedPay } from './pay'
 import type { Account, AccountColor, AccountKind, Category, Goal, IncomeKind, Limit, Recurring, Settings, Tx } from './types'
 import { ACCOUNT_COLORS, REGULAR_INCOME } from './types'
 
@@ -303,8 +304,8 @@ export function plannedInMonth(recurring: Recurring[], settings: Settings, month
   const [y, m] = month.split('-').map(Number)
   const day = (d: number) => iso(y, m, Math.min(d, daysIn(y, m)))
   const events: PlannedEvent[] = [
-    { date: day(settings.salaryDay), kind: 'salary', amount: settings.expectedSalary },
-    { date: day(settings.advanceDay), kind: 'advance', amount: settings.expectedAdvance },
+    { date: day(settings.salaryDay), kind: 'salary', amount: expectedPay(settings, 'salary', day(settings.salaryDay)) },
+    { date: day(settings.advanceDay), kind: 'advance', amount: expectedPay(settings, 'advance', day(settings.advanceDay)) },
     ...recurring.filter(r => r.active && r.kind !== 'topup').map(r => ({ date: day(r.day), kind: 'payment' as const, recurring: r })),
   ]
   return events.sort((a, b) => a.date.localeCompare(b.date))
@@ -360,6 +361,7 @@ export interface Forecast {
 
 /** Был ли регулярный платёж уже оплачен в этом месяце: расход той же категории на сумму ±10% (или с его названием). */
 export function isPaid(r: Recurring, txs: Tx[], month: string, rubOf: (r: Recurring) => number = x => x.amount): boolean {
+  if (r.paidMonths?.includes(month)) return true // отмечен вручную, без операции
   const target = rubOf(r)
   return txs.some(t => t.type === 'expense' && monthOf(t.date) === month && t.categoryId === r.categoryId &&
     (t.comment === r.name || Math.abs(t.rub - target) <= target * 0.1))
@@ -419,7 +421,8 @@ export function monthForecast(
   const expense = fixedPaid + fixedLeft + variablePace
 
   const got = (k: string) => data.txs.some(t => t.type === 'income' && t.incomeKind === k && monthOf(t.date) === month)
-  const income = totals.income + (got('salary') ? 0 : settings.expectedSalary) + (got('advance') ? 0 : settings.expectedAdvance)
+  const ev = (k: 'salary' | 'advance') => plannedInMonth([], settings, month).find(e => e.kind === k) as { amount: number } | undefined
+  const income = totals.income + (got('salary') ? 0 : ev('salary')?.amount ?? 0) + (got('advance') ? 0 : ev('advance')?.amount ?? 0)
   return { income, expense, balance: income - expense, fixedLeft, variablePace }
 }
 
@@ -525,7 +528,7 @@ export function setupSteps(
 ): { id: SetupStep; label: string; done: boolean }[] {
   const active = d.recurring.filter(r => r.active)
   return [
-    { id: 'pay', label: 'Ожидаемые зарплата и аванс', done: d.settings.expectedSalary > 0 && d.settings.expectedAdvance > 0 },
+    { id: 'pay', label: 'Ожидаемые зарплата и аванс', done: !!d.settings.pay?.gross || (d.settings.expectedSalary > 0 && d.settings.expectedAdvance > 0) },
     { id: 'recurring', label: 'Регулярные платежи с копилками', done: active.length > 0 && active.every(r => r.reserveAccountId != null) },
     { id: 'goals', label: 'Цели на копилках', done: d.goals.length > 0 },
     { id: 'security', label: 'Face ID или PIN', done: lockEnabled },

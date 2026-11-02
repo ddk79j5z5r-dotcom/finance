@@ -128,6 +128,8 @@ export interface Recurring {
   /** Счёт-копилка, где копятся деньги на этот платёж (например, «Квартира»). */
   reserveAccountId?: number | null
   active: boolean
+  /** Месяцы YYYY-MM, в которых платёж отмечен оплаченным вручную — без записи расхода. */
+  paidMonths?: string[]
 }
 
 export interface Goal {
@@ -162,6 +164,8 @@ export interface Settings {
   salaryDay: number
   advanceDay: number
   expectedSalary: number // ₽, 0 — не задано
+  /** Расчёт выплат по окладу (как калькулятор ipipip.ru/kz): если задан, суммы аванса и зарплаты считаются сами. Копейки, ставка — проценты. */
+  pay?: { gross: number; bonus: number; rate: number; deduction: number }
   expectedAdvance: number
   defaultAccountId: number | null
   lastExportAt: number | null
