@@ -42,6 +42,7 @@ const PATHS = {
   lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4',
   download: 'M12 3v12M7 10l5 5 5-5M5 21h14',
   bell: 'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0',
+  tune: 'M3 7h10M19 7h2M3 17h2M11 17h10M16 7m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0M8 17m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0',
   sliders: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6',
   check: 'M20 6 9 17l-5-5',
   edit: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
@@ -132,7 +133,7 @@ const ICON_COLOR: Partial<Record<IconName, string>> = {
 export function Badge({ icon, tone, size = 40, color }: { icon: IconName; tone?: Bucket | 'income' | 'transfer' | 'coupon'; size?: number; color?: string }) {
   const bg = color ?? (tone === 'coupon' ? 'var(--coupon)' : tone === 'income' && icon !== 'star' && icon !== 'percent' ? ICON_COLOR.income : ICON_COLOR[icon] ?? ICON_COLOR.tag)
   return (
-    <span className="ico" style={{ width: size, height: size, background: bg }}>
+    <span className="ico" style={{ width: size, height: size, ['--c' as string]: bg }}>
       <Icon name={icon} size={Math.round(size * 0.5)} stroke={2} />
     </span>
   )

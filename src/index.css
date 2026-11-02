@@ -218,7 +218,7 @@ button.row:active, .row.down, .row-main.down { background: var(--press); }
 .bar.thick .fill { border-radius: 4px; }
 
 /* ---------- Значки ---------- */
-.ico { flex: none; display: grid; place-items: center; border-radius: 28%; color: #fff; }
+.ico { flex: none; display: grid; place-items: center; border-radius: 28%; color: #fff; background: var(--c); }
 .badge { flex: none; display: grid; place-items: center; border-radius: 50%; }
 .tone-transfer { background: var(--s3); color: var(--text-2); }
 .acc-badge { flex: none; display: grid; place-items: center; border-radius: 28%; font-weight: 700; color: #fff; }
@@ -703,3 +703,28 @@ button, .row-main, label.chip, .date-chip { transition: transform .2s cubic-bezi
 .paid-banner span span { display: block; font-size: 0.765rem; color: var(--text-2); }
 .paid-check { flex: none; width: 1.9rem; height: 1.9rem; border-radius: 50%; display: grid; place-items: center; background: var(--pos); color: #0b2a17; }
 .link.unmark { align-self: center; display: block; margin: 0.5rem auto 0; min-height: 2.75rem; color: var(--text-2); font-size: 0.824rem; }
+
+/* Операции: шапка со значками, месяц по центру, вкладки с подчёркиванием, круглые мягкие значки */
+.ops-page .page-head .icon-btn { color: var(--text); }
+.ops-page .page-head .icon-btn.on { background: none; color: var(--accent-ink); }
+.ops-month { display: flex; align-items: center; justify-content: space-between; margin: 0 -0.6rem 0.2rem; }
+.ops-month .icon-btn { color: var(--text-2); }
+.ops-month-label { display: inline-flex; align-items: center; gap: 0.35rem; min-height: 44px; padding: 0 0.6rem; font-size: 1.12rem; font-weight: 700; letter-spacing: -0.01em; }
+.tabs-line { display: flex; justify-content: space-between; gap: 0.4rem; margin: 0 -0.2rem 0.5rem; overflow-x: auto; scrollbar-width: none; }
+.tabs-line::-webkit-scrollbar { display: none; }
+.tabs-line button { position: relative; flex: none; min-height: 44px; padding: 0 0.4rem; font-size: 1rem; color: var(--text-2); white-space: nowrap; }
+.tabs-line button.on { color: var(--accent-ink); font-weight: 600; }
+.tabs-line button.on::after { content: ''; position: absolute; left: 0.4rem; right: 0.4rem; bottom: 4px; height: 3px; border-radius: 2px; background: var(--accent); }
+.ops-page .ops-sum { display: flex; align-items: center; flex-wrap: wrap; gap: 0.2rem 0.6rem; margin: 0 0.1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--sep); font-size: 0.882rem; color: var(--text-2); }
+.ops-page .ops-sum b { color: var(--text); font-weight: 600; }
+.ops-page .ops-sum i { font-style: normal; color: var(--muted); }
+.ops-page .ops-count { margin-left: auto; font-size: 0.765rem; color: var(--muted); }
+.ops-day h4 { margin: 1rem 0.2rem 0.55rem; font-size: 0.941rem; font-weight: 500; color: var(--text-2); }
+.ops-page .ops-day .list { margin-bottom: 0.2rem; }
+.ops-page .tx-row { min-height: 4rem; padding-top: 0.55rem; padding-bottom: 0.55rem; }
+.ops-page .tx-row .ico { border-radius: 50%; width: 2.6rem !important; height: 2.6rem !important; background: color-mix(in srgb, var(--c) 26%, transparent); color: var(--c); }
+.ops-page .tx-row .ico svg { width: 1.3rem; height: 1.3rem; }
+.ops-page .tx-row .title { font-size: 0.941rem; font-weight: 600; }
+.ops-page .tx-row .sub { font-size: 0.824rem; margin-top: 1px; }
+.ops-page .tx-row .amt { font-size: 0.941rem; font-weight: 700; }
+.ops-page .list > .tx-row + .tx-row::before { left: 4.3rem; }

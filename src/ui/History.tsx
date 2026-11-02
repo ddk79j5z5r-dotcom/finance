@@ -48,6 +48,7 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
   const [open, setOpen] = useState<Tx | null>(null)
   const [type, setType] = useState<TypeFilter>('all')
   const [search, setSearch] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
   const [limit, setLimit] = useState(150)
   const [pick, setPick] = useState<'period' | 'account' | 'category' | 'income' | 'tag' | 'filters' | null>(null)
   const [limitOpen, setLimitOpen] = useState(false)
@@ -89,28 +90,33 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
   const filterCount = [filter.accountId != null, filter.categoryId != null || filter.noCategory, filter.tag, filter.incomeKind].filter(Boolean).length
 
   return (
-    <div className="page">
-      <div className="page-head"><h1>Операции</h1></div>
-      <label className="search">
-        <Icon name="search" size={16} />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Поиск: название, комментарий, сумма" aria-label="Поиск операций" autoComplete="off" enterKeyHint="search" />
-        {search && <button className="icon-btn" style={{ marginRight: '-0.6rem' }} aria-label="Очистить поиск" onClick={() => setSearch('')}><Icon name="close" size={14} /></button>}
-      </label>
-
-      <div className="ops-bar">
-        <div className="ops-period">
-          <button className="icon-btn" aria-label="Предыдущий месяц" disabled={!single} style={{ opacity: single ? 1 : 0.3 }} onClick={() => single && setFilter({ ...filter, from: shiftMonth(single, -1), to: shiftMonth(single, -1) })}><Icon name="left" size={16} /></button>
-          <button className="menu-chip" onClick={() => setPick('period')} aria-label={`Период: ${periodLabel(filter)}. Изменить`}>{periodLabel(filter)} <Icon name="down" size={14} /></button>
-          <button className="icon-btn" aria-label="Следующий месяц" disabled={!single || single >= monthOf(todayISO())} style={{ opacity: single && single < monthOf(todayISO()) ? 1 : 0.3 }} onClick={() => single && setFilter({ ...filter, from: shiftMonth(single, 1), to: shiftMonth(single, 1) })}><Icon name="right" size={16} /></button>
+    <div className="page ops-page">
+      <div className="page-head">
+        <h1>Операции</h1>
+        <div className="head-actions">
+          <button className={searchOpen ? 'icon-btn on' : 'icon-btn'} aria-label={searchOpen ? 'Скрыть поиск' : 'Поиск'} aria-expanded={searchOpen} onClick={() => { if (searchOpen) setSearch(''); setSearchOpen(v => !v) }}><Icon name="search" size={22} /></button>
+          <button className={filterCount ? 'icon-btn on' : 'icon-btn'} style={{ position: 'relative' }} aria-label={filterCount ? `Фильтры: ${filterCount}` : 'Фильтры'} onClick={() => setPick('filters')}>
+            <Icon name="tune" size={22} />{filterCount > 0 && <span className="badge-n">{filterCount}</span>}
+          </button>
         </div>
-        <button className={filterCount ? 'round-btn accent' : 'round-btn'} aria-label={filterCount ? `Фильтры: ${filterCount}` : 'Фильтры'} onClick={() => setPick('filters')}>
-          <Icon name="filter" size={18} />{filterCount > 0 && <span className="badge-n">{filterCount}</span>}
-        </button>
+      </div>
+      {searchOpen && (
+        <label className="search">
+          <Icon name="search" size={16} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Название, комментарий, сумма" aria-label="Поиск операций" autoComplete="off" enterKeyHint="search" autoFocus />
+          {search && <button className="icon-btn" style={{ marginRight: '-0.6rem' }} aria-label="Очистить поиск" onClick={() => setSearch('')}><Icon name="close" size={14} /></button>}
+        </label>
+      )}
+
+      <div className="ops-month">
+        <button className="icon-btn" aria-label="Предыдущий месяц" disabled={!single} style={{ opacity: single ? 1 : 0.3 }} onClick={() => single && setFilter({ ...filter, from: shiftMonth(single, -1), to: shiftMonth(single, -1) })}><Icon name="left" size={20} /></button>
+        <button className="ops-month-label" onClick={() => setPick('period')} aria-label={`Период: ${periodLabel(filter)}. Изменить`}>{periodLabel(filter)} <Icon name="down" size={18} stroke={2.4} /></button>
+        <button className="icon-btn" aria-label="Следующий месяц" disabled={!single || single >= monthOf(todayISO())} style={{ opacity: single && single < monthOf(todayISO()) ? 1 : 0.3 }} onClick={() => single && setFilter({ ...filter, from: shiftMonth(single, 1), to: shiftMonth(single, 1) })}><Icon name="right" size={20} /></button>
       </div>
 
-      <div className="pills" role="group" aria-label="Тип операций">
+      <div className="tabs-line" role="tablist" aria-label="Тип операций">
         {([['all', 'Все'], ['expense', 'Расходы'], ['income', 'Доходы'], ['transfer', 'Переводы']] as const).map(([v, l]) => (
-          <button key={v} className={type === v ? 'on' : undefined} aria-pressed={type === v} onClick={() => {
+          <button key={v} role="tab" className={type === v ? 'on' : undefined} aria-selected={type === v} onClick={() => {
             setType(v)
             // Категория другого типа (доход ↔ расход) к новой выборке не подходит.
             if ((cat && (v === 'transfer' || (v === 'income') !== (cat.kind === 'income'))) || (filter.noCategory && v !== 'expense' && v !== 'all')) setFilter({ ...filter, categoryId: undefined, noCategory: undefined })
@@ -129,9 +135,10 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
 
       <div ref={slide}>
       <div className="ops-sum" aria-live="polite">
-        <span>{all.length} {plural(all.length, ['операция', 'операции', 'операций'])}</span>
-        <span>{filter.accountId != null ? 'ушло' : 'расход'} <b>{totals.out ? '−' : ''}<Money v={totals.out} /></b></span>
-        <span>{filter.accountId != null ? 'пришло' : 'приход'} <b className="pos"><Money v={totals.in} sign /></b></span>
+        <span>{filter.accountId != null ? 'Ушло' : 'Расходы'} <b><Money v={totals.out} /></b></span>
+        <i aria-hidden="true">·</i>
+        <span>{filter.accountId != null ? 'Пришло' : 'Доходы'} <b><Money v={totals.in} /></b></span>
+        {all.length > 0 && <span className="ops-count">{all.length} {plural(all.length, ['операция', 'операции', 'операций'])}</span>}
       </div>
 
       {env && (
@@ -146,15 +153,12 @@ export function History({ data, filter, setFilter }: { data: Data; filter: OpsFi
           ? <Empty title="Ничего не найдено">Измени период или сбрось фильтры.</Empty>
           : <Empty title="Операций пока нет">Нажми «+» внизу, чтобы записать первую.</Empty>}</div>
       )}
-      {[...byDay].map(([day, list]) => {
-        const net = list.reduce((s, t) => s - spendRub(t) + (t.type === 'income' ? t.rub : 0), 0)
-        return (
-          <section key={day} className="list day-group" aria-label={dayTitle(day)}>
-            <div className="day-head"><span>{dayTitle(day)}</span>{net !== 0 && <span className={net > 0 ? 'pos' : ''}><Money v={net} sign /></span>}</div>
-            {list.map(t => <TxRow key={t.id} data={data} t={t} onOpen={setOpen} />)}
-          </section>
-        )
-      })}
+      {[...byDay].map(([day, list]) => (
+        <section key={day} className="ops-day" aria-label={dayTitle(day)}>
+          <h4>{dayTitle(day)}</h4>
+          <div className="list">{list.map(t => <TxRow key={t.id} data={data} t={t} onOpen={setOpen} />)}</div>
+        </section>
+      ))}
       {all.length > limit && <button className="secondary" onClick={() => setLimit(l => l + 300)}>Показать ещё {Math.min(300, all.length - limit)}</button>}
       </div>
 
