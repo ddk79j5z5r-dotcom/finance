@@ -6,20 +6,20 @@ import { disableLock, enrollFaceId, faceIdSupported, getLock, isLockEnabled, set
 import { AmountInput, Bar, Chips, CUR_SUFFIX, fromInput, Money, Section, Sheet, toInput, useOnce } from './common'
 import { plural } from '../domain/money'
 import { setupSteps } from '../domain/calc'
-import { childrenOf, rateHint, rootCategories, type Data } from './data'
-import { Badge, CATEGORY_ICONS, categoryIcon, Icon, type IconName } from './icons'
+import { rateHint, type Data } from './data'
+import { Icon, type IconName } from './icons'
 import { ImportCk } from './ImportCk'
 import { notify } from './undo'
 
-export type MoreSection = 'pay' | 'categories' | 'recurring' | 'security' | 'backup' | 'reminders' | 'coinkeeper'
-export type MorePage = 'calendar' | 'analytics' | 'accounts' | 'goals' | 'invest'
+export type MoreSection = 'pay' | 'tags' | 'recurring' | 'security' | 'backup' | 'reminders' | 'coinkeeper'
+export type MorePage = 'calendar' | 'analytics' | 'accounts' | 'goals' | 'invest' | 'categories'
 
 const SECTIONS: { id: MoreSection; label: string; icon: IconName }[] = [
   { id: 'backup', label: 'Бэкап и Excel', icon: 'download' },
   { id: 'coinkeeper', label: 'Импорт из CoinKeeper', icon: 'upload' },
   { id: 'pay', label: 'Выплаты', icon: 'banknote' },
   { id: 'recurring', label: 'Регулярные платежи', icon: 'repeat' },
-  { id: 'categories', label: 'Категории', icon: 'tag' },
+  { id: 'tags', label: 'Метки', icon: 'tag' },
   { id: 'security', label: 'Face ID и PIN', icon: 'lock' },
   { id: 'reminders', label: 'Напоминания', icon: 'bell' },
 ]
@@ -97,7 +97,8 @@ export function More({ data, section, setSection, onOpenPage }: {
 
       <Section title="Настройки" />
       <div className="list">
-        <MenuRow icon="tag" color="#5d626d" label="Категории" onClick={() => setSection('categories')} />
+        <MenuRow icon="tag" color="#e0782f" label="Категории" sub={`${data.categories.filter(c => !c.archived && !c.system && (c.kind ?? 'expense') === 'expense').length} расходов · ${data.categories.filter(c => !c.archived && c.kind === 'income').length} доходов`} onClick={() => onOpenPage('categories')} />
+        <MenuRow icon="tag" color="#5d626d" label="Метки" sub={(data.settings.tags ?? []).map(t => `#${t}`).slice(0, 3).join(' ') || 'нет'} onClick={() => setSection('tags')} />
         <MenuRow icon="lock" color="#5d626d" label="Face ID и PIN" sub={data.lockEnabled ? 'включено' : 'выключено'} onClick={() => setSection('security')} />
         <MenuRow icon="bell" color="#5d626d" label="Напоминания" onClick={() => setSection('reminders')} />
       </div>
@@ -116,7 +117,7 @@ export function More({ data, section, setSection, onOpenPage }: {
       {section && (
         <Sheet title={SECTIONS.find(s => s.id === section)!.label} onClose={() => setSection(null)}>
           {section === 'pay' && <PaySection data={data} onDone={() => setSection(null)} />}
-          {section === 'categories' && <CategoriesSection data={data} />}
+          {section === 'tags' && <TagsSection data={data} />}
           {section === 'recurring' && <RecurringSection data={data} />}
           {section === 'security' && <SecuritySection />}
           {section === 'backup' && <BackupSection data={data} />}
@@ -154,81 +155,39 @@ function PaySection({ data, onDone }: { data: Data; onDone: () => void }) {
   )
 }
 
-function CategoriesSection({ data }: { data: Data }) {
-  const [edit, setEdit] = useState<Partial<Category> | null>(null)
-  const roots = rootCategories(data.categories)
-  // Раздел открыли — пункт «Проверить типы категорий» считается выполненным.
-  useEffect(() => { if (!data.settings.categoriesReviewed) saveSettings({ categoriesReviewed: true }) }, [data.settings.categoriesReviewed])
-  const accName = (id?: number | null) => (id != null ? data.accounts.find(a => a.id === id)?.name : undefined)
+/** Метки операций: несколько на одну операцию, фильтр в истории и аналитике. */
+function TagsSection({ data }: { data: Data }) {
+  const tags = data.settings.tags ?? []
+  const [name, setName] = useState('')
+  const [error, setError] = useState('')
+  const used = (t: string) => data.txs.filter(x => x.tags?.includes(t)).length
+  const add = async () => {
+    const n = name.trim().replace(/^#/, '')
+    if (!n) return
+    if (tags.some(t => t.toLocaleLowerCase('ru') === n.toLocaleLowerCase('ru'))) return setError('Такая метка уже есть')
+    await saveSettings({ tags: [...tags, n] })
+    setName(''); setError('')
+  }
+  const remove = async (t: string) => {
+    await saveSettings({ tags: tags.filter(x => x !== t) })
+    notify(`Метка #${t} убрана из списка`, () => saveSettings({ tags }))
+  }
   return (
     <>
-      {edit ? <CategoryForm data={data} cat={edit} onDone={() => setEdit(null)} /> : (
-        <>
-          <div className="card tight">
-            {roots.map(c => (
-              <div key={c.id}>
-                <button className="row" onClick={() => setEdit(c)}>
-                  <Badge icon={categoryIcon(c)} size={36} />
-                  <span className="body">{c.name}{accName(c.accountId) && <span className="muted small"> · {accName(c.accountId)}</span>}</span><span className="muted">›</span>
-                </button>
-                {childrenOf(data.categories, c.id!).map(s => (
-                  <button className="row" style={{ paddingLeft: 20 }} key={s.id} onClick={() => setEdit(s)}>
-                    <span>{s.name}</span><span className="muted">›</span>
-                  </button>
-                ))}
-                <button className="link small" style={{ display: 'block', padding: '4px 0 12px 20px' }} onClick={() => setEdit({ parentId: c.id!, bucket: c.bucket })}>+ подкатегория</button>
-              </div>
-            ))}
+      <div className="list">
+        {tags.map(t => (
+          <div key={t} className="row noic" style={{ padding: '0.3rem 0.82rem' }}>
+            <span className="body"><span className="title">#{t}</span><span className="sub">{used(t) ? `${used(t)} ${plural(used(t), ['операция', 'операции', 'операций'])}` : 'не использовалась'}</span></span>
+            <button className="icon-btn" aria-label={`Убрать метку ${t}`} onClick={() => remove(t)}><Icon name="close" size={14} /></button>
           </div>
-          <button className="secondary" onClick={() => setEdit({ parentId: null, bucket: 'needs' })}>+ Категория</button>
-        </>
-      )}
-    </>
-  )
-}
-
-function CategoryForm({ data, cat, onDone }: { data: Data; cat: Partial<Category>; onDone: () => void }) {
-  const [name, setName] = useState(cat.name ?? '')
-  const [accountId, setAccountId] = useState<number | null>(cat.accountId ?? null)
-  const [icon, setIcon] = useState<string | undefined>(cat.icon)
-  const isSub = cat.parentId != null
-  // Пока иконка не выбрана — подбирается по названию на лету.
-  const shown = categoryIcon({ ...(cat as Category), name, icon })
-  const save = useOnce(async () => {
-    if (!name.trim()) return
-    await db.categories.put({ ...(cat as Category), name: name.trim(), icon, bucket: cat.bucket ?? 'needs', accountId, parentId: cat.parentId ?? null, archived: cat.archived ?? false })
-    onDone()
-  })
-  const archive = useOnce(async () => {
-    await db.categories.update(cat.id!, { archived: true })
-    onDone()
-    notify(`Категория «${cat.name}» скрыта`, () => db.categories.update(cat.id!, { archived: false }).then(() => {}))
-  })
-  return (
-    <>
-      <label className="field-label">Название</label>
-      <input value={name} onChange={e => setName(e.target.value)} autoFocus={!cat.id} />
-      {!isSub && (
-        <>
-          <label className="field-label">Иконка {!icon && <span className="muted">· подобрана по названию</span>}</label>
-          <div className="tile-grid icon-grid">
-            {CATEGORY_ICONS.map(i => (
-              <button key={i} type="button" className={i === shown ? 'tile-btn on' : 'tile-btn'} aria-label={i} aria-pressed={i === shown} onClick={() => setIcon(i)}>
-                <Badge icon={i} size={44} />
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-      <label className="field-label">Счёт по умолчанию</label>
-      <select value={accountId ?? ''} onChange={e => setAccountId(e.target.value ? Number(e.target.value) : null)}>
-        <option value="">{isSub ? 'Как у родительской категории' : 'Основной счёт'}</option>
-        {data.accounts.filter(a => !a.archived).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-      </select>
-      <p className="hint">При выборе этой категории в новой трате счёт подставится сам — например, «Aristo» → счёт «Aristo».</p>
-      <button className="save" onClick={save}>Сохранить</button>
-      {cat.id && <button className="danger" onClick={archive}>Скрыть</button>}
-      <button className="secondary" onClick={onDone}>Назад</button>
+        ))}
+        {tags.length === 0 && <p className="hint" style={{ padding: '0.5rem 0.82rem' }}>Меток нет.</p>}
+      </div>
+      <label className="field-label" htmlFor="new-tag">Новая метка</label>
+      <input id="new-tag" value={name} onChange={e => { setName(e.target.value); setError('') }} onKeyDown={e => e.key === 'Enter' && add()} enterKeyHint="done" placeholder="Например, Ремонт" />
+      {error && <p className="error">{error}</p>}
+      <button className="save" onClick={add} disabled={!name.trim()}>Добавить</button>
+      <p className="hint">Метка отмечает операции поперёк категорий: проект, поездку, обязательные траты. У операции может быть несколько меток. Убранная из списка метка остаётся на старых операциях.</p>
     </>
   )
 }
@@ -282,7 +241,7 @@ function RecurringForm({ data, r, onDone }: { data: Data; r: Partial<Recurring>;
   const [active, setActive] = useState(r.active ?? true)
   const [reserveAccountId, setReserveAccountId] = useState<number | null>(r.reserveAccountId ?? null)
   const [error, setError] = useState('')
-  const cats = data.categories.filter(c => !c.archived && !c.system)
+  const cats = data.categories.filter(c => !c.archived && !c.system && (c.kind ?? 'expense') === 'expense')
   const label = (c: Category) => (c.parentId != null ? `${data.categories.find(p => p.id === c.parentId)?.name} · ${c.name}` : c.name)
   const accounts = data.accounts.filter(a => !a.archived && a.currency === currency)
 

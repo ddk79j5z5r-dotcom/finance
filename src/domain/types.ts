@@ -9,7 +9,13 @@ export const BUCKETS: Bucket[] = ['needs', 'wants', 'savings']
 export type IncomeKind = 'salary' | 'advance' | 'bonus' | 'interest' | 'gift' | 'other'
 export const REGULAR_INCOME: IncomeKind[] = ['salary', 'advance', 'bonus']
 
-export type TxType = 'expense' | 'income' | 'transfer'
+/**
+ * Тип операции — что происходит с деньгами (отдельно от категории):
+ * expense — потребительский расход; income — доход; transfer — перемещение между своими счетами
+ * (в том числе получение и погашение кредита, выдача и возврат долга, пополнение вклада и брокерского счёта);
+ * refund — возврат покупки (уменьшает расходы своей категории); adjust — корректировка остатка (не доход и не расход).
+ */
+export type TxType = 'expense' | 'income' | 'transfer' | 'refund' | 'adjust'
 
 /** Все суммы — целые числа в минимальных единицах (копейки/центы). */
 export interface Account {
@@ -33,13 +39,21 @@ export interface Account {
   taxFree?: boolean
   /** Учитывать в общем балансе и в «Доступно до дохода». Не задано — учитывается. */
   inTotal?: boolean
+  /** Кредитный лимит (для kind = 'credit'): доступно = лимит − задолженность. */
+  creditLimit?: number | null
 }
 
 export const ACCOUNT_COLORS = ['yellow', 'green', 'blue', 'sky', 'orange', 'pink', 'violet', 'gray'] as const
 export type AccountColor = (typeof ACCOUNT_COLORS)[number]
 
-/** card — карта, savings — копилка, broker — брокерский счёт с облигациями. */
-export type AccountKind = 'card' | 'savings' | 'broker'
+/**
+ * card — карта или наличные; savings — копилка, вклад; broker — брокерский счёт;
+ * credit — мой долг: кредит, кредитная карта, личный заём (баланс отрицательный — это задолженность);
+ * debt — мне должны: выданный в долг (актив).
+ */
+export type AccountKind = 'card' | 'savings' | 'broker' | 'credit' | 'debt'
+
+export type CategoryKind = 'expense' | 'income'
 
 export interface Category {
   id?: number
@@ -53,6 +67,15 @@ export interface Category {
   accountId?: number | null
   /** Иконка, выбранная вручную (иначе подбирается по названию). */
   icon?: string
+  /** Расход или доход. Не задано — расход (так хранились категории до появления доходных). */
+  kind?: CategoryKind
+  /** Цвет значка (#rrggbb); не задан — по иконке. */
+  color?: string
+  /** Порядок внутри родителя (меньше — выше). */
+  order?: number
+  favorite?: boolean
+  /** Ключ стартового справочника: по нему повторная загрузка не создаёт дубли. */
+  key?: string
 }
 
 export interface Tx {
@@ -73,6 +96,12 @@ export interface Tx {
   /** Купон по облигации: бумага и ключ события (чтобы не предлагать его снова). */
   secid?: string
   eventKey?: string
+  /** Метки — независимы от категорий и не меняют учёт сумм. */
+  tags?: string[]
+  /** Для возврата: исходный расход. */
+  refundOf?: number
+  /** Общий идентификатор связанных записей: части разделённой покупки, платёж по кредиту + проценты, перевод + комиссия. */
+  group?: string
 }
 
 /** Лимит конверта (категории верхнего уровня) начиная с месяца; действует до следующей записи. */
@@ -140,7 +169,13 @@ export interface Settings {
   setupDismissed?: boolean
   /** Когда последний раз закрыли напоминание о бэкапе (показывается не чаще раза в неделю). */
   backupNudgeAt?: number | null
+  /** Список меток для операций. */
+  tags?: string[]
+  /** Предложение добавить стартовый справочник расходов уже показано (для пользователей со своим справочником). */
+  starterDismissed?: boolean
 }
+
+export const DEFAULT_TAGS = ['Aristo', 'Проект Aristo', 'Работа', 'Отпуск', 'Обязательное', 'Необязательное']
 
 export const DEFAULT_SETTINGS: Settings = {
   rule: { needs: 50, wants: 30, savings: 20 },
@@ -150,6 +185,7 @@ export const DEFAULT_SETTINGS: Settings = {
   expectedAdvance: 0,
   defaultAccountId: null,
   lastExportAt: null,
+  tags: DEFAULT_TAGS,
 }
 
 export const BUCKET_LABEL: Record<Bucket, string> = {

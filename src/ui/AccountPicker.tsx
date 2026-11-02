@@ -17,6 +17,8 @@ export function AccountPicker({ data, accounts, value, onChange, label, exclude 
     ['Карты', list.filter(a => accountKind(a) === 'card')],
     ['Копилки', list.filter(a => accountKind(a) === 'savings')],
     ['Облигации', list.filter(a => accountKind(a) === 'broker')],
+    ['Кредиты и долги', list.filter(a => accountKind(a) === 'credit')],
+    ['Мне должны', list.filter(a => accountKind(a) === 'debt')],
   ]
   return (
     <>

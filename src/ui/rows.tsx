@@ -4,12 +4,13 @@ import type { BondEvent } from '../domain/bonds'
 import { fxLoss, rootOf, type Envelope, type PlannedEvent } from '../domain/calc'
 import { monthOf, todayISO } from '../domain/money'
 import { eventStatus, incomeTx, paymentTx } from '../domain/plan'
-import { INCOME_LABEL, type Recurring, type Tx } from '../domain/types'
+import { INCOME_LABEL, type Category, type Recurring, type Tx } from '../domain/types'
 import { AccountDot } from './AccountBadge'
 import { AmountInput, Money, Sheet, StatusTag, fromInput, toInput, useOnce, useAmountsHidden } from './common'
 import type { Data } from './data'
-import { Entry } from './Entry'
-import { Badge, categoryIcon, Icon, INCOME_ICON } from './icons'
+import { Entry, transferMeaning } from './Entry'
+import { Badge, CatBadge, categoryIcon, categoryLook, Icon, INCOME_ICON } from './icons'
+import { categoryPath } from './Pickers'
 import { notify } from './undo'
 
 const ICON = 30 // px: значки в строках списков
@@ -30,32 +31,39 @@ export function dayTitle(date: string) {
 
 // ---------- Операция ----------
 
-/** Как показать операцию: название слева (категория / вид дохода / счета перевода), подробности второй строкой. */
+/** Как показать операцию: название слева (категория / вид дохода / смысл перевода), подробности второй строкой. */
 export function txLook(data: Data, t: Tx) {
   const acc = data.accounts.find(a => a.id === t.accountId)
   const to = data.accounts.find(a => a.id === t.toAccountId)
+  const c = data.categories.find(x => x.id === t.categoryId)
+  const sub = (...p: (string | undefined)[]) => [...p, acc?.name, t.comment, ...(t.tags ?? []).map(x => `#${x}`)].filter(Boolean).join(' · ')
+  const path = categoryPath(data.categories, t.categoryId)
   if (t.type === 'income') {
     const coupon = t.incomeKind === 'interest' && t.secid
-    return { icon: INCOME_ICON[t.incomeKind!], tone: coupon ? 'coupon' as const : 'income' as const, title: INCOME_LABEL[t.incomeKind!], sub: [acc?.name, t.comment].filter(Boolean).join(' · '), acc, to }
+    if (c && !coupon) { const l = categoryLook(data.categories, c); return { icon: l.icon, color: l.color, tone: 'income' as const, title: path, sub: sub(), acc, to } }
+    return { icon: INCOME_ICON[t.incomeKind ?? 'other'], color: undefined, tone: coupon ? 'coupon' as const : 'income' as const, title: INCOME_LABEL[t.incomeKind ?? 'other'], sub: sub(), acc, to }
   }
   if (t.type === 'transfer') {
-    return { icon: 'transfer' as const, tone: 'transfer' as const, title: `${acc?.name ?? '?'} → ${to?.name ?? '?'}`, sub: ['Перевод', t.comment].filter(Boolean).join(' · '), acc, to }
+    const meaning = transferMeaning(data, t.accountId, t.toAccountId).split(' — ')[0]
+    return { icon: 'transfer' as const, color: undefined, tone: 'transfer' as const, title: `${acc?.name ?? '?'} → ${to?.name ?? '?'}`, sub: [meaning, t.comment, ...(t.tags ?? []).map(x => `#${x}`)].filter(Boolean).join(' · '), acc, to }
   }
-  const c = data.categories.find(x => x.id === t.categoryId)
-  const root = rootOf(data.categories, t.categoryId)
-  return { icon: categoryIcon(root), tone: undefined, title: c && root && c.id !== root.id ? `${root.name} · ${c.name}` : root?.name ?? 'Без категории', sub: [acc?.name, t.comment].filter(Boolean).join(' · '), acc, to }
+  if (t.type === 'adjust') return { icon: 'sliders' as const, color: undefined, tone: 'transfer' as const, title: 'Корректировка остатка', sub: sub(), acc, to }
+  const l = categoryLook(data.categories, c)
+  if (t.type === 'refund') return { icon: l.icon, color: l.color, tone: undefined, title: `Возврат · ${path || 'Без категории'}`, sub: sub(), acc, to }
+  return { icon: l.icon, color: c ? l.color : undefined, tone: undefined, title: path || 'Без категории', sub: sub(t.group ? 'Часть покупки' : undefined), acc, to }
 }
 
-/** Сумма операции со знаком и смысловым цветом: расход «−», доход «+» зелёным, купон фиолетовым, перевод без знака. */
+/** Сумма операции со знаком и смысловым цветом: расход «−», доход и возврат «+» зелёным, купон фиолетовым, перевод без знака. */
 export function TxAmount({ data, t }: { data: Data; t: Tx }) {
   const acc = data.accounts.find(a => a.id === t.accountId)
   const to = data.accounts.find(a => a.id === t.toAccountId)
   const coupon = t.type === 'income' && t.incomeKind === 'interest' && !!t.secid
-  const cls = t.type === 'income' ? (coupon ? 'coupon' : 'pos') : t.type === 'transfer' ? 'muted' : ''
+  const cls = t.type === 'income' || t.type === 'refund' ? (coupon ? 'coupon' : 'pos') : t.type === 'transfer' || t.type === 'adjust' ? 'muted' : ''
   const loss = fxLoss(t)
+  const sign = t.type === 'expense' ? '−' : t.type === 'income' || t.type === 'refund' ? '+' : t.type === 'adjust' ? (t.amount < 0 ? '−' : '+') : ''
   return (
     <span className={`amt ${cls}`}>
-      {t.type === 'expense' ? '−' : t.type === 'income' ? '+' : ''}<Money v={t.amount} cur={acc?.currency} />
+      {sign}<Money v={Math.abs(t.amount)} cur={acc?.currency} />
       {t.type === 'transfer' && to && to.currency !== acc?.currency && <span className="sub">→ <Money v={t.toAmount!} cur={to.currency} /></span>}
       {loss !== 0 && <span className="sub neg">курс {loss > 0 ? '−' : '+'}<Money v={Math.abs(loss)} /></span>}
     </span>
@@ -66,7 +74,7 @@ export function TxRow({ data, t, onOpen }: { data: Data; t: Tx; onOpen: (t: Tx) 
   const v = txLook(data, t)
   return (
     <button className="row" onClick={() => onOpen(t)}>
-      <Badge icon={v.icon} tone={v.tone} size={ICON} />
+      <Badge icon={v.icon} tone={v.tone} color={v.color} size={ICON} />
       <span className="body">
         <span className="title">{v.title}</span>
         <span className="sub" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -109,7 +117,11 @@ export function TxSheet({ data, tx, onClose }: { data: Data; tx: Tx; onClose: ()
       <div className="list">
         <div className="row noic"><span className="body muted">Дата</span><span>{dayTitle(tx.date)}</span></div>
         <div className="row noic"><span className="body muted">{tx.type === 'transfer' ? 'Откуда → куда' : 'Счёт'}</span><span>{tx.type === 'transfer' ? `${v.acc?.name ?? '?'} → ${v.to?.name ?? '?'}` : v.acc?.name}</span></div>
-        {tx.type === 'expense' && <div className="row noic"><span className="body muted">Категория</span><span>{v.title}</span></div>}
+        {(tx.type === 'expense' || tx.type === 'refund' || tx.type === 'income') && <div className="row noic"><span className="body muted">Категория</span><span className="title wrap" style={{ textAlign: 'right', maxWidth: '60%' }}>{categoryPath(data.categories, tx.categoryId) || 'Без категории'}</span></div>}
+        {tx.type === 'transfer' && <div className="row noic"><span className="body muted">Смысл</span><span className="title wrap" style={{ textAlign: 'right', maxWidth: '65%' }}>{transferMeaning(data, tx.accountId, tx.toAccountId)}</span></div>}
+        {tx.type === 'refund' && <div className="row noic"><span className="body muted">Учёт</span><span className="title wrap" style={{ textAlign: 'right', maxWidth: '65%' }}>Уменьшает расход категории в месяце возврата</span></div>}
+        {tx.group && <div className="row noic"><span className="body muted">Связано</span><span>{data.txs.filter(x => x.group === tx.group).length} операции вместе</span></div>}
+        {!!tx.tags?.length && <div className="row noic"><span className="body muted">Метки</span><span className="title wrap" style={{ textAlign: 'right', maxWidth: '65%' }}>{tx.tags.map(x => `#${x}`).join(' ')}</span></div>}
         {tx.comment && <div className="row noic"><span className="body muted">Комментарий</span><span className="title wrap" style={{ textAlign: 'right', maxWidth: '60%' }}>{tx.comment}</span></div>}
         {v.acc && v.acc.currency !== 'RUB' && <div className="row noic"><span className="body muted">В рублях</span><Money v={tx.rub} /></div>}
       </div>
@@ -226,20 +238,20 @@ export function PaySheet({ data, r, date, onClose }: { data: Data; r: Recurring;
 // ---------- Категория бюджета ----------
 
 /** Категория: факт / лимит, остаток или перерасход с величиной; «без лимита» отличается от «лимит 0 ₽». */
-export function CategoryRow({ e, onOpen }: { e: Envelope; onOpen: (e: Envelope) => void }) {
+export function CategoryRow({ e, onOpen, categories, note }: { e: Envelope; onOpen: (e: Envelope) => void; categories?: Category[]; note?: string }) {
   const hidden = useAmountsHidden()
   const over = e.hasLimit && e.spent > e.limit
   const pct = e.limit > 0 ? Math.min(100, (e.spent / e.limit) * 100) : over ? 100 : 0
   const color = over ? 'var(--neg)' : pct >= 85 ? 'var(--warn)' : 'var(--pos)'
   return (
     <button className="row" onClick={() => onOpen(e)} aria-label={hidden ? `${e.category.name}, суммы скрыты` : undefined}>
-      <Badge icon={categoryIcon(e.category)} size={ICON} />
+      {categories ? <CatBadge categories={categories} c={e.category} size={ICON} /> : <Badge icon={categoryIcon(e.category)} size={ICON} />}
       <span className="body">
-        <span className="title">{e.category.name}</span>
+        <span className="title">{e.category.name}{e.category.archived && <span className="muted small"> · в архиве</span>}</span>
         <span className="sub wrap">
-          {!e.hasLimit ? 'без лимита'
+          {!e.hasLimit ? note ?? 'без лимита'
             : over ? <span className="neg">перерасход <Money v={e.spent - e.limit} /></span>
-            : <>осталось <Money v={e.available} /></>}
+            : <>осталось <Money v={e.available} />{note && ` · ${note}`}</>}
         </span>
         {e.hasLimit && <span className="bar" style={{ display: 'block' }}><span className="fill" style={{ display: 'block', width: `${pct}%`, background: color }} /></span>}
       </span>

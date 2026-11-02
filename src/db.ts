@@ -50,6 +50,12 @@ export class FinanceDB extends Dexie {
       trades: '++id, accountId, secid, date',
       bondMarks: 'key',
     })
+    // v3: метки и связи операций (возврат → исходный расход, части разделённой покупки), ключ стартового справочника.
+    // Сами данные не меняются: недостающие поля дополняет ensureCatalog при запуске.
+    this.version(3).stores({
+      txs: '++id, date, accountId, toAccountId, categoryId, type, *tags, group, refundOf',
+      categories: '++id, parentId, key',
+    })
   }
 }
 

@@ -1,4 +1,4 @@
-import { fxLoss, rootOf } from './calc'
+import { rootOf, spendRub } from './calc'
 import { monthOf, shiftMonth } from './money'
 import type { Category, Tx } from './types'
 
@@ -10,7 +10,7 @@ export const daysInMonth = (month: string) => {
 }
 
 /** Расход операции (₽): трата или потеря на разнице курса при обмене. */
-const spendOf = (t: Tx) => (t.type === 'expense' ? t.rub : t.type === 'transfer' ? fxLoss(t) : 0)
+const spendOf = (t: Tx) => spendRub(t)
 
 /** Траты месяца нарастающим итогом по дням (₽): [к 1-му, к 2-му, …, к последнему]. */
 export function cumulativeSpend(txs: Tx[], month: string): number[] {

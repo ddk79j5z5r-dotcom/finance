@@ -35,6 +35,8 @@ const PATHS = {
   search: 'M11 11m-7 0a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3',
   left: 'M15 18l-6-6 6-6',
   right: 'M9 18l6-6-6-6',
+  up: 'M18 15l-6-6-6 6',
+  down: 'M6 9l6 6 6-6',
   close: 'M18 6 6 18M6 6l12 12',
   lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4',
   download: 'M12 3v12M7 10l5 5 5-5M5 21h14',
@@ -125,11 +127,27 @@ const ICON_COLOR: Partial<Record<IconName, string>> = {
 }
 
 /** Круглый цветной значок с белой иконкой. */
-export function Badge({ icon, tone, size = 40 }: { icon: IconName; tone?: Bucket | 'income' | 'transfer' | 'coupon'; size?: number }) {
-  const bg = tone === 'coupon' ? 'var(--coupon)' : tone === 'income' && icon !== 'star' && icon !== 'percent' ? ICON_COLOR.income : ICON_COLOR[icon] ?? ICON_COLOR.tag
+export function Badge({ icon, tone, size = 40, color }: { icon: IconName; tone?: Bucket | 'income' | 'transfer' | 'coupon'; size?: number; color?: string }) {
+  const bg = color ?? (tone === 'coupon' ? 'var(--coupon)' : tone === 'income' && icon !== 'star' && icon !== 'percent' ? ICON_COLOR.income : ICON_COLOR[icon] ?? ICON_COLOR.tag)
   return (
     <span className="ico" style={{ width: size, height: size, background: bg }}>
       <Icon name={icon} size={Math.round(size * 0.5)} stroke={2} />
     </span>
   )
+}
+
+/** Палитра для выбора цвета категории. */
+export const CATEGORY_COLORS = ['#3d8bfd', '#2fa4f0', '#20b8a8', '#2fb36a', '#8bc34a', '#f0a81c', '#f5a623', '#f26b3a', '#f0544f', '#f2588a', '#e46fd0', '#b065ea', '#8a5cf6', '#7a6cf0', '#8d6e52', '#7d8794']
+
+/** Иконка и цвет категории: у подкатегории без своих — как у родителя. */
+export function categoryLook(categories: Category[], c: Category | undefined): { icon: IconName; color: string } {
+  const root = c?.parentId != null ? categories.find(x => x.id === c.parentId) : undefined
+  const icon = isIcon(c?.icon) ? c!.icon as IconName : isIcon(root?.icon) ? root!.icon as IconName : categoryIcon(root ?? c)
+  return { icon, color: c?.color ?? root?.color ?? ICON_COLOR[icon] ?? ICON_COLOR.tag! }
+}
+
+/** Значок категории с её цветом. */
+export function CatBadge({ categories, c, size = 30 }: { categories: Category[]; c: Category | undefined; size?: number }) {
+  const l = categoryLook(categories, c)
+  return <Badge icon={l.icon} color={l.color} size={size} />
 }

@@ -12,7 +12,8 @@ export function balances(accounts: Account[], txs: Tx[], trades: Trade[] = []): 
   const add = (id: number | undefined, v: number) => id != null && res.has(id) && res.set(id, res.get(id)! + v)
   for (const t of txs) {
     if (t.type === 'expense') add(t.accountId, -t.amount)
-    else if (t.type === 'income') add(t.accountId, t.amount)
+    else if (t.type === 'income' || t.type === 'refund') add(t.accountId, t.amount)
+    else if (t.type === 'adjust') add(t.accountId, t.amount) // корректировка: сумма со знаком
     else {
       add(t.accountId, -t.amount)
       add(t.toAccountId, t.toAmount ?? t.amount)
@@ -23,6 +24,18 @@ export function balances(accounts: Account[], txs: Tx[], trades: Trade[] = []): 
 }
 
 /** Разница курса при обмене (₽): сколько отдали по ЦБ минус сколько получили по ЦБ. Положительная — потеря. */
+/**
+ * Потребительский расход операции (₽): расход — плюс, возврат покупки — минус (в месяце возврата),
+ * потеря на курсе при обмене — плюс. Переводы (в том числе погашение кредита, выдача долга, пополнение
+ * копилки или брокерского счёта), доходы и корректировки — не расход.
+ */
+export function spendRub(t: Tx): number {
+  if (t.type === 'expense') return t.rub
+  if (t.type === 'refund') return -t.rub
+  if (t.type === 'transfer') return fxLoss(t)
+  return 0
+}
+
 export function fxLoss(t: Tx): number {
   if (t.type !== 'transfer' || t.toRub == null) return 0
   return t.rub - t.toRub
@@ -44,13 +57,23 @@ export function spentByEnvelope(categories: Category[], txs: Tx[], month: string
   const add = (id: number, v: number) => res.set(id, (res.get(id) ?? 0) + v)
   for (const t of txs) {
     if (monthOf(t.date) !== month) continue
-    if (t.type === 'expense') {
+    if (t.type === 'expense' || t.type === 'refund') {
       const root = rootOf(categories, t.categoryId)
-      if (root) add(root.id!, t.rub)
+      if (root) add(root.id!, spendRub(t))
     } else if (t.type === 'transfer' && fx) {
       const loss = fxLoss(t)
       if (loss) add(fx.id!, loss)
     }
+  }
+  return res
+}
+
+/** Расход месяца по конкретной категории (₽, с возвратами): для лимитов подкатегорий. */
+export function spentByCategory(txs: Tx[], month: string): Map<number, number> {
+  const res = new Map<number, number>()
+  for (const t of txs) {
+    if ((t.type !== 'expense' && t.type !== 'refund') || t.categoryId == null || monthOf(t.date) !== month) continue
+    res.set(t.categoryId, (res.get(t.categoryId) ?? 0) + spendRub(t))
   }
   return res
 }
@@ -80,14 +103,75 @@ export interface Envelope {
 
 /** Состояние конвертов в месяце. Лимит действует, пока не изменён; остаток и перерасход в следующий месяц не переходят. */
 export function envelopes(categories: Category[], limits: Limit[], txs: Tx[], month: string): Envelope[] {
-  const roots = categories.filter(c => c.parentId == null && !c.archived)
   const spent = spentByEnvelope(categories, txs, month)
+  // Только расходные; архивные — если в месяце по ним были траты (история не теряется).
+  const roots = categories.filter(c => c.parentId == null && (c.kind ?? 'expense') === 'expense' && (!c.archived || spent.has(c.id!)))
   return roots.map(category => {
     const rec = limitRecord(limits, category.id!, month)
     const limit = rec?.amount ?? 0
     const s = spent.get(category.id!) ?? 0
     return { category, limit, hasLimit: !!rec && (rec.amount > 0 || !!rec.strict), spent: s, available: limit - s }
   })
+}
+
+/**
+ * Подкатегории конверта: собственный расход каждой и её лимит. Плюс строка «без подкатегории» —
+ * траты прямо в основной категории. Лимиты подкатегорий — детализация бюджета родителя, а не добавка к нему.
+ */
+export function subEnvelopes(categories: Category[], limits: Limit[], txs: Tx[], month: string, rootId: number): Envelope[] {
+  const spent = spentByCategory(txs, month)
+  return categories
+    .filter(c => c.parentId === rootId && (!c.archived || spent.has(c.id!)))
+    .map(category => {
+      const rec = limitRecord(limits, category.id!, month)
+      const limit = rec?.amount ?? 0
+      const s = spent.get(category.id!) ?? 0
+      return { category, limit, hasLimit: !!rec && (rec.amount > 0 || !!rec.strict), spent: s, available: limit - s }
+    })
+}
+
+/** Бюджет основной категории: её собственный лимит, а если его нет — сумма лимитов подкатегорий. */
+export function envelopePlan(env: Envelope, subs: Envelope[]): { limit: number; hasLimit: boolean; fromSubs: boolean } {
+  if (env.hasLimit) return { limit: env.limit, hasLimit: true, fromSubs: false }
+  const withLimit = subs.filter(x => x.hasLimit)
+  return withLimit.length ? { limit: withLimit.reduce((s, x) => s + x.limit, 0), hasLimit: true, fromSubs: true } : { limit: 0, hasLimit: false, fromSubs: false }
+}
+
+// ---------- Движение денег (не потребительские расходы) ----------
+
+export interface Movements {
+  /** Переведено в копилки и на вклады (минус выведено обратно). */
+  saved: number
+  /** Переведено на брокерские счета (минус выведено). */
+  invested: number
+  /** Погашено долгов: перевод на счёт-кредит (основной долг; проценты — отдельным расходом). */
+  repaid: number
+  /** Получено в кредит или в долг: перевод со счёта-кредита. */
+  borrowed: number
+  /** Выдано в долг и возвращено мне. */
+  lent: number
+  returned: number
+}
+
+/** Перемещения между своими счетами за период — отдельно от доходов и расходов. */
+export function movements(accounts: Account[], txs: Tx[], from: string, to: string): Movements {
+  const kind = new Map(accounts.map(a => [a.id!, accountKind(a)]))
+  const r: Movements = { saved: 0, invested: 0, repaid: 0, borrowed: 0, lent: 0, returned: 0 }
+  for (const t of txs) {
+    const m = monthOf(t.date)
+    if (t.type !== 'transfer' || m < from || m > to) continue
+    const a = kind.get(t.accountId), b = kind.get(t.toAccountId!)
+    const v = t.toRub ?? t.rub
+    if (b === 'credit') r.repaid += v
+    if (a === 'credit') r.borrowed += t.rub
+    if (b === 'debt') r.lent += v
+    if (a === 'debt') r.returned += t.rub
+    if (b === 'savings' && a !== 'savings') r.saved += v
+    if (a === 'savings' && b !== 'savings') r.saved -= t.rub
+    if (b === 'broker' && a !== 'broker') r.invested += v
+    if (a === 'broker' && b !== 'broker') r.invested -= t.rub
+  }
+  return r
 }
 
 // ---------- Рекомендация при поступлении ----------
@@ -182,8 +266,7 @@ export function monthTotals(txs: Tx[], month: string): { income: number; expense
   for (const t of txs) {
     if (monthOf(t.date) !== month) continue
     if (t.type === 'income') income += t.rub
-    else if (t.type === 'expense') expense += t.rub
-    else expense += fxLoss(t)
+    else expense += spendRub(t)
   }
   return { income, expense }
 }
@@ -202,9 +285,8 @@ export function netChangeSince(txs: Tx[], fromDate: string): number {
   let s = 0
   for (const t of txs) {
     if (t.date < fromDate) continue
-    if (t.type === 'income') s += t.rub
-    else if (t.type === 'expense') s -= t.rub
-    else s -= fxLoss(t)
+    if (t.type === 'income' || t.type === 'adjust') s += t.rub
+    else s -= spendRub(t)
   }
   return s
 }
@@ -309,7 +391,7 @@ export function monthForecast(
     if (t.type === 'expense') {
       if (t.categoryId != null && fixedCats.has(t.categoryId)) fixedPaid += t.rub
       else variable += t.rub
-    } else if (t.type === 'transfer') variable += fxLoss(t)
+    } else variable += t.type === 'refund' ? -t.rub : t.type === 'transfer' ? fxLoss(t) : 0
   }
   const fixedLeft = active.filter(r => !isPaid(r, data.txs, month, rubOf)).reduce((s, r) => s + rubOf(r), 0)
 
@@ -324,6 +406,7 @@ export function monthForecast(
     for (const t of data.txs) {
       if (monthOf(t.date) !== pm) continue
       if (t.type === 'expense' && !(t.categoryId != null && fixedCats.has(t.categoryId))) v += t.rub
+      else if (t.type === 'refund') v -= t.rub
       else if (t.type === 'transfer') v += fxLoss(t)
     }
     prevDaily.push(v / new Date(py, pmm, 0).getDate())
@@ -367,7 +450,7 @@ export function accountsForEntry(accounts: Account[], txs: Tx[], defaultId: numb
     if (t.date < from) continue
     if (type === 'transfer' ? t.type === 'transfer' : t.type === type) use.set(t.accountId, (use.get(t.accountId) ?? 0) + 1)
   }
-  const rank = (a: Account) => ({ card: 0, savings: 1, broker: 2 })[accountKind(a)]
+  const rank = (a: Account) => ({ card: 0, credit: 1, savings: 2, broker: 3, debt: 4 })[accountKind(a)]
   return [...accounts].sort((a, b) =>
     rank(a) - rank(b) ||
     Number(b.id === defaultId) - Number(a.id === defaultId) ||

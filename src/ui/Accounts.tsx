@@ -34,6 +34,8 @@ export function Accounts({ data, onOpenOps, onAdd, initialTab = 'accounts' }: {
       ['Карты', accounts.filter(a => accountKind(a) === 'card')],
       ['Копилки', accounts.filter(a => accountKind(a) === 'savings')],
       ['Брокерские', accounts.filter(a => accountKind(a) === 'broker')],
+      ['Кредиты и долги', accounts.filter(a => accountKind(a) === 'credit')],
+      ['Мне должны', accounts.filter(a => accountKind(a) === 'debt')],
     ]
   const sum = (list: Account[]) => list.reduce((s, a) => s + (data.toRub(data.value.get(a.id!) ?? 0, a.currency) ?? 0), 0)
 
@@ -63,13 +65,16 @@ export function Accounts({ data, onOpenOps, onAdd, initialTab = 'accounts' }: {
                     hasBonds ? null : data.recurring.some(r => r.reserveAccountId === a.id) ? 'резерв под платежи' : null,
                     inTotal(a) ? null : 'не в балансе',
                   ].filter(Boolean).join(' · ')
+                  const credit = accountKind(a) === 'credit'
                   return (
                     <div key={a.id}>
                       <button className="row" style={{ padding: '0.42rem 0.82rem' }} onClick={() => setEditAcc(a)}>
                         <AccountBadge account={a} color={data.colorOf(a)} size={30} />
                         <span className="body">
                           <span className="title">{a.name}</span>
-                          {hasBonds
+                          {credit
+                            ? <span className="sub">{b < 0 ? <>долг <Money v={-b} cur={a.currency} /></> : 'долга нет'}{a.creditLimit ? <> · доступно <Money v={Math.max(0, a.creditLimit + Math.min(0, b))} cur={a.currency} /></> : null}</span>
+                            : hasBonds
                             ? <span className="sub">деньги <Money v={data.bal.get(a.id!) ?? 0} /> · облигации <Money v={data.bondValue.get(a.id!) ?? 0} /></span>
                             : sub && <span className="sub">{sub}</span>}
                         </span>
@@ -147,7 +152,10 @@ function AccountSheet({ data, acc, onClose, onOpenOps, onTransfer }: { data: Dat
   const [currency, setCurrency] = useState<Currency>(acc.currency ?? 'RUB')
   // Вводится текущий баланс; начальный подбирается так, чтобы с учётом всех операций получилось именно это.
   const current = acc.id != null ? data.bal.get(acc.id) ?? 0 : 0
-  const [now, setNow] = useState(current > 0 ? toInput(current) : '')
+  const isCredit0 = acc.id != null && accountKind(acc as Account) === 'credit'
+  // У кредита вводится задолженность (положительным числом), хранится отрицательным остатком.
+  const [now, setNow] = useState(isCredit0 ? (current < 0 ? toInput(-current) : '') : current > 0 ? toInput(current) : '')
+  const [creditLimit, setCreditLimit] = useState(toInput(acc.creditLimit))
   const [isDefault, setIsDefault] = useState(acc.id != null && acc.id === data.settings.defaultAccountId)
   const [kind, setKind] = useState<AccountKind>(acc.id != null ? accountKind(acc as Account) : 'card')
   // null — цвет подбирается сам (по названию банка или следующий по порядку), пока не выбран вручную.
@@ -166,14 +174,17 @@ function AccountSheet({ data, acc, onClose, onOpenOps, onTransfer }: { data: Dat
 
   const save = useOnce(async () => {
     if (!name.trim()) return
+    const entered = fromInput(now)
+    const wanted = entered == null ? null : kind === 'credit' ? -entered : entered
     const id = await db.accounts.put({
-      ...(acc as Account), name: name.trim(), currency, openingBalance: fromInput(now) == null && current !== 0
+      ...(acc as Account), name: name.trim(), currency, openingBalance: wanted == null && current !== 0
         ? acc.openingBalance ?? 0 // поле очистили при отрицательном балансе — ничего не меняем
-        : (acc.openingBalance ?? 0) + ((fromInput(now) ?? 0) - current),
+        : (acc.openingBalance ?? 0) + ((wanted ?? 0) - current),
       archived: acc.archived ?? false, order: acc.order ?? data.accounts.length, kind, color: color ?? undefined, inTotal: counted, taxFree,
+      creditLimit: kind === 'credit' ? fromInput(creditLimit) ?? undefined : undefined,
     })
     if (isDefault) await saveSettings({ defaultAccountId: id })
-    const t = kind !== 'card' ? fromInput(target) : null
+    const t = kind === 'savings' || kind === 'broker' ? fromInput(target) : null
     if (t) {
       await db.goals.put({
         ...(goal ?? {}), name: name.trim(), target: t, accountId: id!, deadline: deadline || null,
@@ -200,8 +211,14 @@ function AccountSheet({ data, acc, onClose, onOpenOps, onTransfer }: { data: Dat
       <input value={name} onChange={e => setName(e.target.value)} placeholder="Т-Банк, Наличные, Накопительный…" autoFocus={!acc.id} />
       <label className="field-label">Валюта</label>
       {used ? <div>{currency}</div> : <Chips options={CURRENCIES.map(c => ({ value: c, label: c }))} value={currency} onChange={setCurrency} />}
-      <label className="field-label">{hasBonds ? 'Свободные деньги на счёте (без облигаций)' : 'Сейчас на счёте'}</label>
+      <label className="field-label">{kind === 'credit' ? 'Сколько сейчас должен' : kind === 'debt' ? 'Сколько сейчас должны мне' : hasBonds ? 'Свободные деньги на счёте (без облигаций)' : 'Сейчас на счёте'}</label>
       <AmountInput value={now} onChange={setNow} suffix={CUR_SUFFIX[currency]} />
+      {kind === 'credit' && (
+        <>
+          <label className="field-label">Кредитный лимит <span className="muted">(для кредитки, необязательно)</span></label>
+          <AmountInput value={creditLimit} onChange={setCreditLimit} suffix={CUR_SUFFIX[currency]} placeholder="Нет" />
+        </>
+      )}
       <p className="hint">
         {acc.id ? 'Если не совпадает с банком — введи реальную сумму, история операций не изменится.' : 'Сколько на счёте прямо сейчас.'}
         {current < 0 && <> Сейчас по операциям: <Money v={current} cur={currency} />.</>}
@@ -211,9 +228,15 @@ function AccountSheet({ data, acc, onClose, onOpenOps, onTransfer }: { data: Dat
         { value: 'card' as const, label: 'Карта', icon: 'card' as const },
         { value: 'savings' as const, label: 'Копилка', icon: 'target' as const },
         { value: 'broker' as const, label: 'Облигации', icon: 'percent' as const },
+        { value: 'credit' as const, label: 'Кредит / долг', icon: 'banknote' as const },
+        { value: 'debt' as const, label: 'Мне должны', icon: 'users' as const },
       ]} value={kind} onChange={setKind} />
       <p className="hint">{kind === 'broker'
         ? 'Брокерский счёт: сюда добавляются облигации («+ облигация» в списке счетов). Деньги на него переводишь как обычно.'
+        : kind === 'credit'
+        ? 'Кредитка, кредит, рассрочка или долг другу. Покупка по кредитке — расход с этого счёта; погашение — перевод сюда (не расход), проценты — расход. Кредитный лимит — не твои деньги и в баланс не входит.'
+        : kind === 'debt'
+        ? 'Кому дал в долг. Выдача — перевод сюда, возврат — перевод отсюда: это не расход и не доход.'
         : 'Карты показываются первыми при вводе трат, копилки — после.'}</p>
       <label className="field-label">Цвет</label>
       <div className="color-picker">
@@ -224,8 +247,8 @@ function AccountSheet({ data, acc, onClose, onOpenOps, onTransfer }: { data: Dat
         ))}
       </div>
       <label className="check"><input type="checkbox" checked={counted} onChange={e => setCounted(e.target.checked)} /> Учитывать в общем балансе</label>
-      <p className="hint" style={{ marginTop: 0 }}>{kind === 'card' ? 'Деньги этой карты войдут и в «Доступно до дохода».' : 'Копилки и облигации — резерв: в «Доступно до дохода» не входят.'}</p>
-      {kind !== 'card' && (
+      <p className="hint" style={{ marginTop: 0 }}>{kind === 'card' ? 'Деньги этой карты войдут и в «Доступно до дохода».' : kind === 'credit' ? 'Долг вычитается из общего баланса. В «Доступно до дохода» кредит не входит.' : kind === 'debt' ? 'Долг мне входит в общий баланс как актив, но не в «Доступно до дохода».' : 'Копилки и облигации — резерв: в «Доступно до дохода» не входят.'}</p>
+      {(kind === 'savings' || kind === 'broker') && (
         <>
           <label className="field-label">Цель <span className="muted">(необязательно)</span></label>
           <div className="row2">

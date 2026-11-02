@@ -56,13 +56,13 @@ export async function exportWorkbook(db: FinanceDB): Promise<ArrayBuffer> {
   wb.creator = 'Финансы'
   wb.created = new Date()
 
-  const TYPE = { expense: 'Расход', income: 'Доход', transfer: 'Перевод' } as const
+  const TYPE = { expense: 'Расход', income: 'Доход', transfer: 'Перевод', refund: 'Возврат покупки', adjust: 'Корректировка' } as const
   addTable(wb, 'Операции', [
     { name: 'Дата', width: 12, fmt: 'dd.mm.yyyy' }, { name: 'Тип', width: 10 }, { name: 'Счёт', width: 16 },
     { name: 'Валюта', width: 8 }, { name: 'Сумма', fmt: NUM_FMT }, { name: 'Сумма ₽', fmt: RUB_FMT },
     { name: 'Категория', width: 20 }, { name: 'Подкатегория', width: 16 },
     { name: 'Вид дохода', width: 14 }, { name: 'Счёт зачисления', width: 16 }, { name: 'Сумма зачисления', fmt: NUM_FMT },
-    { name: 'Разница курса ₽', fmt: RUB_FMT }, { name: 'Комментарий', width: 30 },
+    { name: 'Разница курса ₽', fmt: RUB_FMT }, { name: 'Комментарий', width: 30 }, { name: 'Метки', width: 20 },
   ], txs.map(t => {
     const c = t.categoryId != null ? cat.get(t.categoryId) : undefined
     const root = rootOf(categories, t.categoryId)
@@ -75,6 +75,7 @@ export async function exportWorkbook(db: FinanceDB): Promise<ArrayBuffer> {
       t.toAmount != null ? toMajor(t.toAmount) : null,
       t.type === 'transfer' ? toMajor(fxLoss(t)) : null,
       t.comment || null,
+      t.tags?.length ? t.tags.join(', ') : null,
     ]
   }))
 

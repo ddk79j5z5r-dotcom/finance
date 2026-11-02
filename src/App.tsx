@@ -7,6 +7,7 @@ import { Accounts, type EntryPreset } from './ui/Accounts'
 import { Analytics } from './ui/Analytics'
 import { Budget } from './ui/Budget'
 import { Calendar } from './ui/Calendar'
+import { Categories } from './ui/Categories'
 import { Sheet, useAmountsHidden } from './ui/common'
 import { useData } from './ui/data'
 import { Distribute } from './ui/Distribute'
@@ -30,7 +31,7 @@ const TABS: { id: Tab | 'add'; label: string; icon: IconName }[] = [
 const RELOCK_AFTER_MS = 60_000
 
 const TAB_TITLE: Record<Tab, string> = { home: 'Главная', history: 'Операции', budget: 'Бюджет', more: 'Ещё' }
-const PAGE_TITLE: Record<MorePage, string> = { calendar: 'Календарь', analytics: 'Аналитика', accounts: 'Счета и цели', goals: 'Счета и цели', invest: 'Инвестиции' }
+const PAGE_TITLE: Record<MorePage, string> = { calendar: 'Календарь', analytics: 'Аналитика', accounts: 'Счета и цели', goals: 'Счета и цели', invest: 'Инвестиции', categories: 'Категории' }
 
 export default function App() {
   const data = useData()
@@ -89,6 +90,7 @@ export default function App() {
   const page = (p: MorePage) => (
     p === 'calendar' ? <Calendar data={data} />
       : p === 'analytics' ? <Analytics data={data} onOpenOps={openOps} />
+      : p === 'categories' ? <Categories data={data} />
       : <Accounts key={p} data={data} onOpenOps={openOps} onAdd={setAdding} initialTab={p === 'goals' ? 'goals' : p === 'invest' ? 'invest' : 'accounts'} />
   )
   const screens: Record<Tab, ReactNode> = {
