@@ -19,6 +19,7 @@ export function Categories({ data }: { data: Data }) {
   const [edit, setEdit] = useState<Partial<Category> | null>(null)
   const [importing, setImporting] = useState(false)
   const [showArchive, setShowArchive] = useState(false)
+  const [ordering, setOrdering] = useState(false)
   const cats = data.categories
   // Раздел открыли — пункт «Проверить категории» в настройке считается выполненным.
   useEffect(() => { if (!data.settings.categoriesReviewed) saveSettings({ categoriesReviewed: true }) }, [data.settings.categoriesReviewed])
@@ -55,6 +56,10 @@ export function Categories({ data }: { data: Data }) {
 
   return (
     <div className="page">
+      <div className="page-head">
+        <h1>Категории</h1>
+        {!q.trim() && roots.length > 1 && <button className="menu-chip" aria-pressed={ordering} onClick={() => setOrdering(v => !v)}>{ordering ? 'Готово' : 'Порядок'}</button>}
+      </div>
       <Segmented value={kind} onChange={v => { setKind(v); setQ('') }} options={[{ value: 'expense', label: 'Расходы' }, { value: 'income', label: 'Доходы' }]} />
       <label className="search" style={{ marginTop: '0.6rem' }}>
         <Icon name="search" size={16} />
@@ -62,7 +67,7 @@ export function Categories({ data }: { data: Data }) {
       </label>
 
       {!q.trim() && (missing.roots > 0 || missing.subs > 0) && (
-        <button className="card tight row" style={{ marginTop: '0.6rem' }} onClick={() => setImporting(true)}>
+        <button className="card tight row" style={{ marginTop: '0.6rem', padding: '0.6rem 0.82rem' }} onClick={() => setImporting(true)}>
           <span className="menu-ico" style={{ background: 'var(--accent)', color: '#1a1a1a' }}><Icon name="plus" size={16} /></span>
           <span className="body"><span className="title">Готовые категории</span><span className="sub wrap">{missing.roots ? `${missing.roots} ${plural(missing.roots, ['группа', 'группы', 'групп'])} и ` : ''}{missing.subs} {plural(missing.subs, ['подкатегория', 'подкатегории', 'подкатегорий'])} — добавь только нужные</span></span>
           <Icon name="right" size={16} />
@@ -96,15 +101,20 @@ export function Categories({ data }: { data: Data }) {
                     <div className="row" style={{ padding: '0.36rem 0.5rem 0.36rem 0.82rem' }}>
                       <button className="row-main" style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', flex: 1, minWidth: 0, textAlign: 'left' }} onClick={() => setEdit(c)}>
                         <CatBadge categories={cats} c={c} size={34} />
-                        <span className="body"><span className="title">{c.name}{c.favorite && ' ★'}</span><span className="sub">{subs.length ? `${subs.length} ${plural(subs.length, ['подкатегория', 'подкатегории', 'подкатегорий'])}` : 'без подкатегорий'}{total ? ` · ${opsWord(total)}` : ''}</span></span>
+                        <span className="body"><span className="title wrap">{c.name}{c.favorite && ' ★'}</span><span className="sub wrap">{subs.length ? `${subs.length} ${plural(subs.length, ['подкатегория', 'подкатегории', 'подкатегорий'])}` : 'без подкатегорий'}{total ? ` · ${opsWord(total)}` : ''}</span></span>
                       </button>
-                      <button className="icon-btn" aria-label="Выше" disabled={i === 0} onClick={() => shift(c, -1)}><Icon name="up" size={14} /></button>
-                      <button className="icon-btn" aria-label="Ниже" disabled={i === roots.length - 1} onClick={() => shift(c, 1)}><Icon name="down" size={14} /></button>
-                      <button className="icon-btn" aria-label={isOpen ? 'Свернуть' : 'Развернуть'} aria-expanded={isOpen} onClick={() => toggle(c.id!)}>
-                        <span style={{ display: 'inline-flex', transform: isOpen ? 'rotate(90deg)' : undefined, transition: 'transform .2s' }}><Icon name="right" size={16} /></span>
-                      </button>
+                      {ordering ? (
+                        <>
+                          <button className="icon-btn" aria-label={`«${c.name}» выше`} disabled={i === 0} style={{ opacity: i === 0 ? 0.3 : 1 }} onClick={() => shift(c, -1)}><Icon name="up" size={16} /></button>
+                          <button className="icon-btn" aria-label={`«${c.name}» ниже`} disabled={i === roots.length - 1} style={{ opacity: i === roots.length - 1 ? 0.3 : 1 }} onClick={() => shift(c, 1)}><Icon name="down" size={16} /></button>
+                        </>
+                      ) : (
+                        <button className="icon-btn" aria-label={isOpen ? `Свернуть «${c.name}»` : `Подкатегории «${c.name}»`} aria-expanded={isOpen} onClick={() => toggle(c.id!)}>
+                          <span style={{ display: 'inline-flex', transform: isOpen ? 'rotate(180deg)' : undefined, transition: 'transform .2s' }}><Icon name="down" size={16} /></span>
+                        </button>
+                      )}
                     </div>
-                    {isOpen && (
+                    {isOpen && !ordering && (
                       <>
                         {subs.map(subRow)}
                         <button className="row" style={{ padding: '0 0.82rem 0 3.1rem', minHeight: '2.6rem' }} onClick={() => setEdit({ parentId: c.id!, kind })}><span className="body link">+ Подкатегория</span></button>

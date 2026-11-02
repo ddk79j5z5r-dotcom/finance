@@ -1,4 +1,5 @@
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { project, reducedMotion, rubberband, spring } from './motion'
 import { amountToInput, formatMoney, parseAmount } from '../domain/money'
 import type { Currency } from '../domain/types'
@@ -88,6 +89,8 @@ export function Sheet({ title, onClose, children, full = false, cancel = false }
   const onPointerDown = (e: React.PointerEvent) => {
     const s = st.current, sheet = sheetRef.current!
     s.moved = false
+    // Окно внутри окна рисуется отдельно, но события React всплывают к родителю — родитель не должен тянуться.
+    if (!sheet.contains(e.target as Node)) return
     if (s.closing || reducedMotion() || document.documentElement.classList.contains('kb-open')) return
     const t = e.target as Element
     if (t.closest('input, textarea, select, .keypad, .scroll-row, .an-chart')) return
@@ -131,7 +134,8 @@ export function Sheet({ title, onClose, children, full = false, cancel = false }
     return () => sheet.removeEventListener('touchmove', onTouchMove)
   }, [])
 
-  return (
+  // В корень документа: иначе родитель с transform делает «fixed» относительным к себе, а нижняя панель перекрывает окно.
+  return createPortal(
     <div className="sheet-backdrop">
       <div className="sheet-scrim" ref={scrimRef} onClick={() => close()} />
       <div ref={sheetRef} className={full ? 'sheet full' : 'sheet'} role="dialog" aria-label={title}
@@ -152,7 +156,8 @@ export function Sheet({ title, onClose, children, full = false, cancel = false }
         )}
         <div className="sheet-body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

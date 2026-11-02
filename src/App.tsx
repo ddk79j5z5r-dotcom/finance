@@ -69,6 +69,9 @@ export default function App() {
 
   useLayoutEffect(() => { window.scrollTo(0, scrollOf.current[tab]) }, [tab])
 
+  // Скрытие сумм — на корне документа: окна снизу рисуются вне .app.
+  useEffect(() => { document.documentElement.classList.toggle('priv', hidden) }, [hidden])
+
   if (!lock || !data) return null
   if (locked && isLockEnabled(lock)) return <LockScreen lock={lock} onUnlock={() => setLocked(false)} />
 
@@ -105,7 +108,7 @@ export default function App() {
   }
 
   return (
-    <div className={hidden ? 'app priv' : 'app'}>
+    <div className="app">
       <main>
         {(Object.keys(screens) as Tab[]).map(t => (
           <div key={t} hidden={t !== tab}>
