@@ -78,7 +78,9 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
         // Зарплата и премия в один день — одной точкой: «Зарплата + премия».
         const main = incomes.find(e => e.kind !== 'extra') ?? incomes[0]
         const rest = incomes.filter(e => e !== main)
-        const label = eventTitle(main) + (rest.length === 1 ? ` + ${eventTitle(rest[0]).toLowerCase()}` : rest.length > 1 ? ` + ещё ${rest.length}` : '')
+        // Премия «с зарплатой» входит в её сумму — подписываем, чтобы было видно.
+        const withPremium = main.kind === 'salary' && !!data.settings.pay?.premium?.value && !data.settings.pay.premium.day
+        const label = eventTitle(main) + (withPremium && !rest.length ? ' + премия' : '') + (rest.length === 1 ? ` + ${eventTitle(rest[0]).toLowerCase()}` : rest.length > 1 ? ` + ещё ${rest.length}` : '')
         pts.push({ key: `${date}+`, date, label, sum: incomes.reduce((s, e) => s + e.amount, 0), known: incomes.every(e => e.amount > 0) })
       }
       if (pays.length) pts.push({ key: `${date}-`, date, label: pays.length === 1 ? pays[0].recurring.name : `Платежи · ${pays.length}`, sum: -pays.reduce((s, e) => s + rubOf(e.recurring), 0), known: true })

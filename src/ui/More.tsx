@@ -6,7 +6,7 @@ import { disableLock, enrollFaceId, faceIdSupported, getLock, isLockEnabled, set
 import { AmountInput, Bar, Chips, CUR_SUFFIX, fromInput, Money, Section, Segmented, Sheet, toInput, useOnce } from './common'
 import { monthOf, plural, shiftMonth, todayISO } from '../domain/money'
 import { plannedInMonth, setupSteps, type PlannedEvent } from '../domain/calc'
-import { payForMonth, payMonthFor } from '../domain/pay'
+import { ADVANCE_LAST_DAY, hasOfficialCalendar, payForMonth, payMonthFor } from '../domain/pay'
 import { rateHint, type Data } from './data'
 import { Icon, type IconName } from './icons'
 import { ImportCk } from './ImportCk'
@@ -155,7 +155,7 @@ function PaySection({ data, onDone }: { data: Data; onDone: () => void }) {
   const premium = premMode === 'none' ? undefined : premMode === 'percent'
     ? { mode: 'percent' as const, value: Math.max(0, Number(premValue.replace(',', '.')) || 0), day: Number(premDay) || 0 }
     : { mode: 'amount' as const, value: fromInput(premValue) ?? 0, day: Number(premDay) || 0 }
-  const extraList = extras.map(x => ({ name: x.name.trim(), amount: fromInput(x.amount) ?? 0, day: day(x.day), taxed: x.taxed })).filter(x => x.name && x.amount)
+  const extraList = extras.map(x => ({ name: x.name.trim(), amount: fromInput(x.amount) ?? 0, day: Number(x.day) ? day(x.day) : 0, taxed: x.taxed })).filter(x => x.name && x.amount)
   const pay = {
     gross: calc ? fromInput(gross) ?? 0 : 0, bonus: calc ? fromInput(bonus) ?? 0 : 0, rate, deduction: fromInput(deduction) ?? 0,
     premium: premium && premium.value > 0 && (premium.mode === 'amount' || calc) ? premium : undefined,
@@ -198,7 +198,7 @@ function PaySection({ data, onDone }: { data: Data; onDone: () => void }) {
         <>
           <label className="field-label">Оклад в месяц, до вычета НДФЛ</label>
           <AmountInput value={gross} onChange={setGross} suffix="₽" />
-          <label className="field-label">Надбавки и доплаты в месяц <span className="muted">(постоянные, приходят с зарплатой)</span></label>
+          <label className="field-label">Надбавки и доплаты в месяц <span className="muted">(считаются по рабочим дням, как оклад)</span></label>
           <AmountInput value={bonus} onChange={setBonus} suffix="₽" placeholder="0" />
           <div className="row2">
             <div>
@@ -241,7 +241,8 @@ function PaySection({ data, onDone }: { data: Data; onDone: () => void }) {
               <input aria-label="Название выплаты" value={x.name} onChange={e => setExtra(i, { name: e.target.value })} placeholder="Например, компенсация жилья" />
               <div className="extra-line">
                 <AmountInput value={x.amount} onChange={v => setExtra(i, { amount: v })} suffix="₽" placeholder="Сумма" />
-                <select aria-label="Число месяца" value={x.day} onChange={e => setExtra(i, { day: e.target.value })}>
+                <select aria-label="Когда приходит" value={x.day} onChange={e => setExtra(i, { day: e.target.value })}>
+                  <option value="0">С зарплатой</option>
                   {Array.from({ length: 31 }, (_, k) => <option key={k + 1} value={k + 1}>{k + 1}-го</option>)}
                 </select>
                 <button className="icon-btn" aria-label="Убрать выплату" onClick={() => setExtras(list => list.filter((_, j) => j !== i))}><Icon name="close" size={14} /></button>
@@ -251,7 +252,7 @@ function PaySection({ data, onDone }: { data: Data; onDone: () => void }) {
           ))}
         </div>
       )}
-      <button className="secondary" onClick={() => setExtras(list => [...list, { name: '', amount: '', day: String(s.salaryDay), taxed: false }])}>+ Выплата</button>
+      <button className="secondary" onClick={() => setExtras(list => [...list, { name: '', amount: '', day: '0', taxed: true }])}>+ Выплата</button>
       {!calc && (pay.premium || pay.extras) && (
         <>
           <label className="field-label" htmlFor="ndfl2">НДФЛ для премии и выплат</label>
@@ -275,14 +276,14 @@ function PaySection({ data, onDone }: { data: Data; onDone: () => void }) {
                   <div key={e.kind + e.date} className="pay-block">
                     <div className="line" style={{ padding: 0 }}><b>{e.kind === 'advance' ? 'Аванс' : 'Зарплата'} {shortDay(e.date)}</b><b className="pos">{r(e.amount)}</b></div>
                     {e.kind === 'advance' ? (
-                      <p>За {monthNom(c.month)}: оклад {r(pay.gross)} ÷ 2 = {r(c.advanceGross)} − НДФЛ {r(c.advanceTax)}</p>
+                      <p>За 1–{ADVANCE_LAST_DAY} {monthGen(c.month)}: {c.base !== pay.gross ? <>(оклад {r(pay.gross)} + надбавки {r(pay.bonus)})</> : <>оклад {r(pay.gross)}</>} × {c.halfDays} раб. дн. ÷ {c.days} раб. дн. = {r(c.advanceGross)} − НДФЛ {r(c.advanceTax)}</p>
                     ) : (
-                      <p>За {monthNom(c.month)}: начислено {r(c.accrued)} − НДФЛ {r(c.tax)} = {r(c.net)} на руки, минус аванс {r(c.advance)}</p>
+                      <p>За {monthNom(c.month)}: {[`оклад`, pay.bonus && `надбавки`, c.premium && `премия`, c.other && `другое`].filter(Boolean).join(' + ')} = {r(c.accrued)} − НДФЛ {r(c.tax)}{c.untaxed ? <> + без налога {r(c.untaxed)}</> : null} = {r(c.net)} на руки, минус аванс {r(c.advance)}</p>
                     )}
                   </div>
                 )
               })}
-              {pay.gross > 0 && <p className="hint" style={{ margin: 0 }}>Аванс — половина оклада без надбавок; надбавки, НДФЛ с них и вычеты учитываются в зарплате. Больничные, отпуск и неполный месяц не учитываются — такая выплата придёт меньше, в расчёт пойдёт фактическая сумма.</p>}
+              {pay.gross > 0 && <p className="hint" style={{ margin: 0 }}>Аванс — оклад и надбавки за рабочие дни с 1 по {ADVANCE_LAST_DAY} число по производственному календарю{!hasOfficialCalendar(Number(preview[0].date.slice(0, 4))) ? ' (для этого года — по общему правилу)' : ''}. Премия и выплаты «с зарплатой» приходят в остатке. Больничные, отпуск и неполный месяц не учитываются — такая выплата придёт меньше, в расчёт пойдёт фактическая сумма.</p>}
             </div>
       )}
       <button className="save" onClick={save}>Сохранить</button>
@@ -292,6 +293,7 @@ function PaySection({ data, onDone }: { data: Data; onDone: () => void }) {
 
 const GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
 const NOM = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь']
+const monthGen = (ym: string) => GEN[Number(ym.slice(5)) - 1]
 const monthNom = (ym: string) => NOM[Number(ym.slice(5)) - 1]
 const shortDay = (d: string) => `${Number(d.slice(8))} ${GEN[Number(d.slice(5, 7)) - 1].slice(0, 3)}.`
 
