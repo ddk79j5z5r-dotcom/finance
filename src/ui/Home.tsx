@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { saveSettings } from '../db'
-import type { BondEvent } from '../domain/bonds'
+import { bondEvents, type BondEvent } from '../domain/bonds'
 import { accountKind, envelopes, eventTitle, monthTotals, plannedInMonth, upcoming, type PlannedEvent } from '../domain/calc'
 import { monthLabel, monthOf, plural, todayISO } from '../domain/money'
 import { availableUntilNextIncome, eventStatus, inTotal } from '../domain/plan'
@@ -71,7 +71,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
       byDate.set(e.date, [...(byDate.get(e.date) ?? []), e])
     }
     // Поступления и платежи одного дня — отдельными точками: плюс и минус не смешиваются в одну сумму.
-    const pts: { key: string; date: string; label: string; sum: number; known: boolean }[] = []
+    const pts: { key: string; date: string; label: string; sum: number; known: boolean; coupon?: boolean; approx?: boolean }[] = []
     for (const [date, evs] of [...byDate].sort(([a], [b]) => a.localeCompare(b))) {
       const incomes = evs.filter(e => e.kind !== 'payment') as Exclude<PlannedEvent, { kind: 'payment' }>[]
       const pays = evs.filter(e => e.kind === 'payment') as { recurring: Recurring }[]
@@ -86,7 +86,12 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
       }
       if (pays.length) pts.push({ key: `${date}-`, date, label: pays.length === 1 ? pays[0].recurring.name : `Платежи · ${pays.length}`, sum: -pays.reduce((s, e) => s + rubOf(e.recurring), 0), known: true })
     }
-    return pts
+    // Купоны и погашения облигаций — фиолетовыми точками; ещё не объявленный купон — «≈» по последнему.
+    const in31 = new Date(today + 'T00:00:00'); in31.setDate(in31.getDate() + 31)
+    for (const b of bondEvents(data.trades, data.bonds, today, todayISO(in31), data.taxFree)) {
+      pts.push({ key: b.key, date: b.date, label: `${b.kind === 'coupon' ? 'Купон' : 'Погашение'} ${b.shortName}`, sum: b.amount ?? 0, known: b.amount != null, coupon: true, approx: b.estimated })
+    }
+    return pts.sort((a, b) => a.date.localeCompare(b.date))
   })()
 
   // Распределение собственных денег: на жизнь (карты), цели (накопленное на копилках с целью), резерв (остальное).
@@ -147,7 +152,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
 
       {timeline.length > 0 && (
         <div className="timeline-scroll">
-        <button className="timeline" onClick={onOpenCalendar} aria-label="Ближайшие поступления и платежи. Открыть календарь">
+        <button className="timeline" onClick={onOpenCalendar} aria-label="Ближайшие поступления, платежи и купоны. Открыть календарь">
           <span className="tl-line" aria-hidden="true" />
           <span className="tl-pt now">
             <i />
@@ -157,10 +162,10 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
           </span>
           {timeline.map(p => (
             <span className="tl-pt" key={p.key}>
-              <i className={p.sum < 0 ? 'out' : 'in'} />
+              <i className={p.coupon ? 'coupon' : p.sum < 0 ? 'out' : 'in'} />
               <b>{p.label}</b>
               <span className="d">{shortDate(p.date)}</span>
-              <span className={`v ${p.sum < 0 ? 'neg' : 'pos'}`}>{p.known ? <Money v={p.sum} sign whole /> : 'сумма не задана'}</span>
+              <span className={`v ${p.coupon ? 'coupon' : p.sum < 0 ? 'neg' : 'pos'}`}>{p.known ? <>{p.approx && '≈ '}<Money v={p.sum} sign whole /></> : p.coupon ? 'не объявлен' : 'сумма не задана'}</span>
             </span>
           ))}
         </button>
