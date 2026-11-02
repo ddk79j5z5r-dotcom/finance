@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { FinanceDB } from '../db'
-import { addStarter, CategoryError, incomeKindFor, mergeCategory, missingStarter, moveCategory, nameTaken, removeOrArchive, STARTER, starterKey } from './categories'
+import { CategoryError, deleteCategories, incomeKindFor, mergeCategory, moveCategory, nameTaken, removeOrArchive } from './categories'
 import { balances, envelopePlan, envelopes, monthTotals, movements, spendRub, subEnvelopes } from './calc'
 import { ensureCatalog, seedIfEmpty } from './seed'
 import type { Account, Category, Tx } from './types'
@@ -10,47 +10,35 @@ const fresh = () => new FinanceDB(`cat-${n++}`)
 const R = (rub: number) => rub * 100
 let id = 1
 const tx = (p: Partial<Tx>): Tx => ({ id: id++, date: '2026-10-05', type: 'expense', accountId: 1, amount: 0, rub: 0, comment: '', createdAt: 0, ...p })
-const total = (k: 'expense' | 'income') => STARTER[k].reduce((s, [, , , subs]) => s + 1 + subs.length, 0)
 
-describe('стартовый справочник', () => {
-  it('новая база: все расходы и доходы, повторная загрузка дублей не создаёт', async () => {
+describe('свой справочник', () => {
+  it('новая база — без готовых категорий, только служебная; повторный запуск ничего не добавляет', async () => {
     const db = fresh()
     await seedIfEmpty(db)
-    const count = await db.categories.count()
-    expect(count).toBe(total('expense') + total('income') + 1) // + служебная «Разница курса»
-    expect(await addStarter(db, 'expense')).toBe(0)
-    expect(await addStarter(db, 'income')).toBe(0)
+    expect((await db.categories.toArray()).map(c => c.name)).toEqual(['Разница курса при обмене'])
+    await db.categories.add({ name: 'Продукты', parentId: null, bucket: 'needs', archived: false })
+    await seedIfEmpty(db)
     await ensureCatalog(db)
-    expect(await db.categories.count()).toBe(count)
+    expect(await db.categories.count()).toBe(2)
+    expect((await db.categories.toArray())[1].kind).toBe('expense')
   })
 
-  it('существующий справочник: свои категории сохраняются, совпадения по названию не дублируются', async () => {
+  it('удалённые категории доходов не возвращаются при запуске', async () => {
     const db = fresh()
-    const food = await db.categories.add({ name: 'продукты', parentId: null, bucket: 'needs', archived: false })
-    await db.categories.add({ name: 'Мясо и птица', parentId: food!, bucket: 'needs', archived: false })
-    await db.categories.add({ name: 'Aristo', parentId: null, bucket: 'needs', archived: false })
-    await ensureCatalog(db) // расходы не добавляет — только доходы и тип у старых
-    const cats = await db.categories.toArray()
-    expect(cats.filter(c => c.kind === 'expense').map(c => c.name)).toEqual(['продукты', 'Мясо и птица', 'Aristo'])
-    expect(missingStarter(cats, 'expense', ['Продукты'])).toEqual({ roots: 0, subs: 11 })
-    await addStarter(db, 'expense', ['Продукты'])
-    const after = await db.categories.toArray()
-    expect(after.filter(c => c.parentId === food && c.name === 'Мясо и птица')).toHaveLength(1)
-    expect(after.find(c => c.id === food)?.key).toBe(starterKey('expense', 'Продукты'))
-    expect(after.some(c => c.name === 'Aristo')).toBe(true)
+    await seedIfEmpty(db)
+    expect((await db.categories.toArray()).some(c => c.kind === 'income')).toBe(false)
   })
 
-  it('старые доходы получают категорию по виду, «От родителей» сохраняется', async () => {
-    const db = fresh()
-    await db.txs.bulkAdd([
-      tx({ id: undefined, type: 'income', incomeKind: 'salary', amount: R(65000), rub: R(65000) }),
-      tx({ id: undefined, type: 'income', incomeKind: 'gift', amount: R(3000), rub: R(3000) }),
-    ])
-    await ensureCatalog(db)
-    const cats = await db.categories.toArray(), txs = await db.txs.toArray()
-    const name = (cid?: number | null) => cats.find(c => c.id === cid)?.name
-    expect(txs.map(t => name(t.categoryId))).toEqual(['Зарплата', 'От родителей'])
-    expect(incomeKindFor(cats, txs[0].categoryId)).toBe('salary')
+  it('вид дохода — по названию своей категории или её родителя', () => {
+    const cats: Category[] = [
+      { id: 1, name: 'Работа', parentId: null, bucket: 'needs', archived: false, kind: 'income' },
+      { id: 2, name: 'Зарплата', parentId: 1, bucket: 'needs', archived: false, kind: 'income' },
+      { id: 3, name: 'Аванс', parentId: 1, bucket: 'needs', archived: false, kind: 'income' },
+      { id: 4, name: 'Премия', parentId: 1, bucket: 'needs', archived: false, kind: 'income' },
+      { id: 5, name: 'Купоны ОФЗ', parentId: null, bucket: 'needs', archived: false, kind: 'income' },
+      { id: 6, name: 'Фриланс', parentId: 1, bucket: 'needs', archived: false, kind: 'income' },
+    ]
+    expect([2, 3, 4, 5, 6].map(id => incomeKindFor(cats, id))).toEqual(['salary', 'advance', 'bonus', 'interest', 'other'])
   })
 })
 
@@ -101,6 +89,16 @@ describe('правка справочника', () => {
     expect((await db.categories.where('parentId').equals(car).toArray()).every(c => c.archived)).toBe(true)
     expect(await removeOrArchive(db, auto)).toBe('deleted') // ни операций, ни лимитов — удаляется вместе с пустой подкатегорией
     expect(await db.categories.where('parentId').equals(auto).count()).toBe(0)
+  })
+
+  it('удаление архива: категории с подкатегориями удаляются, операции остаются «без категории», лимиты снимаются', async () => {
+    const { db, car } = await setup()
+    await removeOrArchive(db, car)
+    const n = await deleteCategories(db, [car])
+    expect(n).toBe(3)
+    expect(await db.categories.where('parentId').equals(car).count()).toBe(0)
+    expect((await db.txs.toArray()).every(t => t.categoryId == null)).toBe(true)
+    expect(await db.limits.count()).toBe(0)
   })
 })
 

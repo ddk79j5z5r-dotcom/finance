@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { db, saveSettings } from '../db'
-import { addStarter, byOrder, CategoryError, kindOf, mergeCategory, missingStarter, moveCategory, nameTaken, removeOrArchive, STARTER, withChildren } from '../domain/categories'
+import { byOrder, CategoryError, deleteCategories, kindOf, mergeCategory, moveCategory, nameTaken, removeOrArchive, withChildren } from '../domain/categories'
 import { plural } from '../domain/money'
 import type { Category, CategoryKind } from '../domain/types'
 import { Empty, Section, Segmented, Sheet, useOnce } from './common'
@@ -17,7 +17,7 @@ export function Categories({ data }: { data: Data }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState<Set<number>>(new Set())
   const [edit, setEdit] = useState<Partial<Category> | null>(null)
-  const [importing, setImporting] = useState(false)
+  const [cleanup, setCleanup] = useState<'archive' | 'starter' | null>(null)
   const [showArchive, setShowArchive] = useState(false)
   const [ordering, setOrdering] = useState(false)
   const cats = data.categories
@@ -33,7 +33,9 @@ export function Categories({ data }: { data: Data }) {
     for (const t of data.txs) if (t.categoryId != null) m.set(t.categoryId, (m.get(t.categoryId) ?? 0) + 1)
     return m
   }, [data.txs])
-  const missing = missingStarter(cats, kind)
+  // Категории, которые когда-то добавило само приложение (готовый справочник), — без операций, лимитов и платежей.
+  const used = (id: number) => withChildren(cats, id).some(x => (count.get(x) ?? 0) > 0 || data.limits.some(l => l.categoryId === x) || data.recurring.some(r => r.categoryId === x))
+  const unusedStarter = mine.filter(c => c.key && c.parentId == null && !used(c.id!))
   const found = q.trim() ? mine.filter(c => categoryPath(cats, c.id).toLocaleLowerCase('ru').includes(q.trim().toLocaleLowerCase('ru'))).sort((a, b) => categoryPath(cats, a.id).localeCompare(categoryPath(cats, b.id), 'ru')) : []
   const toggle = (id: number) => setOpen(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
 
@@ -66,10 +68,10 @@ export function Categories({ data }: { data: Data }) {
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Поиск по категориям" aria-label="Поиск по категориям" autoComplete="off" enterKeyHint="search" />
       </label>
 
-      {!q.trim() && (missing.roots > 0 || missing.subs > 0) && (
-        <button className="card tight row" style={{ marginTop: '0.6rem', padding: '0.6rem 0.82rem' }} onClick={() => setImporting(true)}>
-          <span className="menu-ico" style={{ background: 'var(--accent)', color: '#1a1a1a' }}><Icon name="plus" size={16} /></span>
-          <span className="body"><span className="title">Готовые категории</span><span className="sub wrap">{missing.roots ? `${missing.roots} ${plural(missing.roots, ['группа', 'группы', 'групп'])} и ` : ''}{missing.subs} {plural(missing.subs, ['подкатегория', 'подкатегории', 'подкатегорий'])} — добавь только нужные</span></span>
+      {!q.trim() && unusedStarter.length > 0 && (
+        <button className="card tight row" style={{ marginTop: '0.6rem', padding: '0.6rem 0.82rem' }} onClick={() => setCleanup('starter')}>
+          <span className="menu-ico" style={{ background: 'var(--s3)', color: 'var(--text)' }}><Icon name="close" size={14} /></span>
+          <span className="body"><span className="title">Убрать готовые без операций</span><span className="sub wrap">{unusedStarter.length} {plural(unusedStarter.length, ['группа', 'группы', 'групп'])}, добавленных приложением: {unusedStarter.slice(0, 3).map(c => c.name).join(', ')}{unusedStarter.length > 3 ? '…' : ''}</span></span>
           <Icon name="right" size={16} />
         </button>
       )}
@@ -141,13 +143,36 @@ export function Categories({ data }: { data: Data }) {
                 </div>
               )}
               <p className="hint">Архивные категории не предлагаются при вводе, но остаются в истории и отчётах.</p>
+              <button className="danger" onClick={() => setCleanup('archive')}>Удалить архив</button>
             </>
           )}
         </>
       )}
 
       {edit && <CategoryEditor data={data} cat={edit} count={count} onClose={() => setEdit(null)} />}
-      {importing && <StarterImport data={data} kind={kind} onClose={() => setImporting(false)} />}
+      {cleanup && (() => {
+        const list = cleanup === 'archive' ? archived : unusedStarter
+        const ops = list.reduce((s, c) => s + withChildren(cats, c.id!).reduce((a, id) => a + (count.get(id) ?? 0), 0), 0)
+        const subs = list.reduce((s, c) => s + withChildren(cats, c.id!).length - 1, 0)
+        return (
+          <Sheet title={cleanup === 'archive' ? 'Удалить архив?' : 'Убрать готовые категории?'} onClose={() => setCleanup(null)}>
+            <div className="list">
+              {list.map(c => <div key={c.id} className="row" style={{ padding: '0.42rem 0.82rem' }}><CatBadge categories={cats} c={c} /><span className="body title">{categoryPath(cats, c.id)}</span></div>)}
+            </div>
+            <ul className="hint" style={{ paddingLeft: '1.2rem' }}>
+              <li>Удаляются насовсем: {list.length} {plural(list.length, ['категория', 'категории', 'категорий'])}{subs ? ` и ${subs} ${plural(subs, ['подкатегория', 'подкатегории', 'подкатегорий'])}` : ''}.</li>
+              {ops > 0 ? <li>Остаются в истории, но без категории: {opsWord(ops)}.</li> : <li>Операций в них нет.</li>}
+              <li>Отменить нельзя — перед этим можно сделать бэкап в Excel.</li>
+            </ul>
+            <button className="danger" onClick={async () => {
+              const n = await deleteCategories(db, list.map(c => c.id!))
+              setCleanup(null)
+              notify(`Удалено: ${list.length} ${plural(list.length, ['категория', 'категории', 'категорий'])}${n ? `, ${opsWord(n)} без категории` : ''}`)
+            }}>Удалить</button>
+            <button className="secondary" onClick={() => setCleanup(null)}>Отмена</button>
+          </Sheet>
+        )
+      })()}
     </div>
   )
 }
@@ -312,36 +337,6 @@ function CategoryEditor({ data, cat, count, onClose }: { data: Data; cat: Partia
       )}
       {!isNew && <button className="danger" onClick={archive}>{used ? (cat.archived ? 'Уже в архиве' : 'В архив') : 'Удалить'}</button>}
       {!isNew && used && !cat.archived && <p className="hint">Категорию с операциями нельзя удалить без следа — она уйдёт в архив. Чтобы перенести её операции в другую категорию, используй «Объединить».</p>}
-    </Sheet>
-  )
-}
-
-/** Добавление готовых групп в существующий справочник: только выбранные, без дублей и без замены своих. */
-function StarterImport({ data, kind, onClose }: { data: Data; kind: CategoryKind; onClose: () => void }) {
-  const groups = STARTER[kind].map(([name, icon, color]) => ({ name, icon, color, miss: missingStarter(data.categories, kind, [name]) })).filter(g => g.miss.roots || g.miss.subs)
-  const [chosen, setChosen] = useState<Set<string>>(new Set())
-  const apply = useOnce(async () => {
-    const n = await addStarter(db, kind, [...chosen])
-    if (kind === 'expense') await saveSettings({ starterDismissed: true })
-    onClose()
-    notify(`Добавлено ${n} ${plural(n, ['категория', 'категории', 'категорий'])}`)
-  })
-  return (
-    <Sheet title="Готовые категории" onClose={onClose}>
-      <p className="hint" style={{ marginTop: 0 }}>Отметь нужные группы. Свои категории останутся как есть; совпадающие по названию не задублируются, в них добавятся недостающие подкатегории.</p>
-      <div className="list">
-        {groups.map(g => (
-          <label key={g.name} className="row" style={{ padding: '0.42rem 0.82rem' }}>
-            <Badge icon={g.icon as never} color={g.color} size={30} />
-            <span className="body"><span className="title">{g.name}</span><span className="sub">{g.miss.roots ? 'новая группа · ' : 'дополнить · '}{g.miss.subs} {plural(g.miss.subs, ['подкатегория', 'подкатегории', 'подкатегорий'])}</span></span>
-            <input type="checkbox" checked={chosen.has(g.name)} onChange={() => setChosen(s => { const n = new Set(s); if (n.has(g.name)) n.delete(g.name); else n.add(g.name); return n })} />
-          </label>
-        ))}
-      </div>
-      <div className="btn-row">
-        <button className="secondary" onClick={() => setChosen(chosen.size === groups.length ? new Set() : new Set(groups.map(g => g.name)))}>{chosen.size === groups.length ? 'Снять все' : 'Выбрать все'}</button>
-        <button className="save" disabled={!chosen.size} onClick={apply}>Добавить{chosen.size ? ` · ${chosen.size}` : ''}</button>
-      </div>
     </Sheet>
   )
 }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { db } from '../db'
-import { addStarter, incomeKindFor, starterKey } from '../domain/categories'
+import { incomeKindFor } from '../domain/categories'
 import { accountKind, accountsForEntry } from '../domain/calc'
 import { amountToInput, evalAmount, formatMoney, hasOperator, parseAmount, todayISO } from '../domain/money'
 import { convertToRub, rateFor } from '../domain/rates'
@@ -38,13 +38,10 @@ export function transferMeaning(data: Data, fromId?: number | null, toId?: numbe
   return 'Перевод между своими счетами — не доход и не расход'
 }
 
-/** Категория по ключу стартового справочника; если её нет — добавляется её группа. */
-async function starterCategory(data: Data, root: string, sub: string): Promise<number | null> {
-  const key = starterKey('expense', root, sub)
-  const has = data.categories.find(c => c.key === key)
-  if (has) return has.id!
-  await addStarter(db, 'expense', [root])
-  return (await db.categories.where('key').equals(key).first())?.id ?? null
+/** Своя категория расходов по слову в названии (подкатегория важнее родителя); нет — запись без категории. */
+function categoryByName(data: Data, re: RegExp): number | null {
+  const live = data.categories.filter(c => !c.archived && !c.system && (c.kind ?? 'expense') === 'expense' && re.test(c.name.toLocaleLowerCase('ru')))
+  return (live.find(c => c.parentId != null) ?? live[0])?.id ?? null
 }
 
 interface Part { categoryId: number | null; amount: string }
@@ -64,7 +61,7 @@ export function Entry({ data, tx, preset, onSaved }: { data: Data; tx?: Tx; pres
   const [sign, setSign] = useState<1 | -1>(tx?.type === 'adjust' && tx.amount < 0 ? -1 : 1)
   const [accountId, setAccountId] = useState<number | null>(tx?.accountId ?? preset?.accountId ?? (preset?.toAccountId != null ? accounts.find(a => a.id !== preset.toAccountId)?.id : undefined) ?? defaultAcc ?? accounts[0]?.id ?? null)
   // Последняя категория дохода — по умолчанию для нового дохода.
-  const lastIncomeCat = useMemo(() => [...data.txs].reverse().find(t => t.type === 'income' && t.categoryId != null)?.categoryId ?? data.categories.find(c => c.key === starterKey('income', 'Работа', 'Зарплата'))?.id ?? null, [data.txs, data.categories])
+  const lastIncomeCat = useMemo(() => [...data.txs].reverse().find(t => t.type === 'income' && t.categoryId != null)?.categoryId ?? data.categories.find(c => c.kind === 'income' && !c.archived && /зарплат/i.test(c.name))?.id ?? null, [data.txs, data.categories])
   const [categoryId, setCategoryId] = useState<number | null>(tx?.categoryId ?? null)
   const [incomeCat, setIncomeCat] = useState<number | null>(tx?.type === 'income' ? tx.categoryId ?? null : lastIncomeCat)
   const [noCategory, setNoCategory] = useState(!!tx && tx.type === 'expense' && tx.categoryId == null)
@@ -206,8 +203,8 @@ export function Entry({ data, tx, preset, onSaved }: { data: Data; tx?: Tx; pres
       } else if (mode === 'loan' || (mode === 'transfer' && feeK > 0 && !tx)) {
         // Платёж по кредиту: основной долг — перевод; проценты и комиссия — отдельные расходы. Всё связано общим идентификатором.
         const group = newGroup()
-        const interestCat = interestK ? await starterCategory(data, 'Банковские расходы', 'Проценты по кредитам') : null
-        const feeCat = feeK ? await starterCategory(data, 'Банковские расходы', 'Комиссии за переводы') : null
+        const interestCat = interestK ? categoryByName(data, /процент/) : null
+        const feeCat = feeK ? categoryByName(data, /комисси/) : null
         await db.transaction('rw', db.txs, async () => {
           record.group = group
           record.id = await db.txs.add({ ...record, toAmount: isExchange ? to! : principal })
@@ -335,7 +332,7 @@ export function Entry({ data, tx, preset, onSaved }: { data: Data; tx?: Tx; pres
               <div><label className="field-label" htmlFor="fee">Комиссия</label><AmountInput value={fee} onChange={setFee} suffix="₽" placeholder="0" /></div>
             </div>
           )}
-          {mode === 'loan' && minor ? <p className="hint">Основной долг <Money v={Math.max(0, minor - interestK - feeK)} /> — перевод, не расход. Проценты{feeK ? ' и комиссия' : ''} — расход «Банковские расходы».</p> : null}
+          {mode === 'loan' && minor ? <p className="hint">Основной долг <Money v={Math.max(0, minor - interestK - feeK)} /> — перевод, не расход. Проценты{feeK ? ' и комиссия' : ''} — расход в вашей категории со словом «процент»{feeK ? ' / «комисси»' : ''} в названии, если такой нет — без категории.</p> : null}
         </>
       )}
       {mode === 'refund' && original && <p className="hint" style={{ marginTop: 0 }}>Уменьшит расход категории в месяце возврата. Можно вернуть до <Money v={refundable} /> {refundable < original.amount && '(часть уже возвращена)'}.</p>}

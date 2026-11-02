@@ -8,16 +8,14 @@ import { plural } from '../domain/money'
 import { setupSteps } from '../domain/calc'
 import { rateHint, type Data } from './data'
 import { Icon, type IconName } from './icons'
-import { ImportCk } from './ImportCk'
 import { Payouts } from './Payouts'
 import { notify } from './undo'
 
-export type MoreSection = 'pay' | 'tags' | 'recurring' | 'security' | 'backup' | 'reminders' | 'coinkeeper'
+export type MoreSection = 'pay' | 'tags' | 'recurring' | 'security' | 'backup' | 'reminders'
 export type MorePage = 'calendar' | 'analytics' | 'accounts' | 'goals' | 'invest' | 'categories' | 'plan'
 
 const SECTIONS: { id: MoreSection; label: string; icon: IconName }[] = [
   { id: 'backup', label: 'Бэкап и Excel', icon: 'download' },
-  { id: 'coinkeeper', label: 'Импорт из CoinKeeper', icon: 'upload' },
   { id: 'pay', label: 'Выплаты', icon: 'banknote' },
   { id: 'recurring', label: 'Регулярные платежи', icon: 'repeat' },
   { id: 'tags', label: 'Метки', icon: 'tag' },
@@ -93,7 +91,6 @@ export function More({ data, section, setSection, onOpenPage }: {
       <Section title="Данные" />
       <div className="list">
         <MenuRow icon="download" color="#5d626d" label="Бэкап и Excel" sub={backupAgo == null ? 'бэкапа ещё не было' : backupAgo === 0 ? 'бэкап сегодня' : `бэкап ${backupAgo} ${plural(backupAgo, ['день', 'дня', 'дней'])} назад`} onClick={() => setSection('backup')} />
-        <MenuRow icon="upload" color="#5d626d" label="Импорт из CoinKeeper" onClick={() => setSection('coinkeeper')} />
       </div>
 
       <Section title="Настройки" />
@@ -124,7 +121,6 @@ export function More({ data, section, setSection, onOpenPage }: {
           {section === 'security' && <SecuritySection />}
           {section === 'backup' && <BackupSection data={data} />}
           {section === 'reminders' && <RemindersSection />}
-          {section === 'coinkeeper' && <ImportCk data={data} onDone={() => setSection(null)} />}
         </Sheet>
       )}
     </div>

@@ -46,7 +46,9 @@ describe('Excel: экспорт → импорт', () => {
   it('читаемые листы на месте и оформлены таблицами', async () => {
     const a = freshDb()
     await seedIfEmpty(a)
-    await a.txs.add({ date: '2026-09-01', type: 'expense', accountId: 1, amount: 150000, rub: 150000, categoryId: 2, comment: '', createdAt: 1 })
+    const home = (await a.categories.add({ name: 'Жильё', parentId: null, bucket: 'needs', archived: false, kind: 'expense' }))!
+    const rent = (await a.categories.add({ name: 'Аренда', parentId: home, bucket: 'needs', archived: false, kind: 'expense' }))!
+    await a.txs.add({ date: '2026-09-01', type: 'expense', accountId: 1, amount: 150000, rub: 150000, categoryId: rent, comment: '', createdAt: 1 })
     const wb = new ExcelJS.Workbook()
     await wb.xlsx.load(await exportWorkbook(a))
     expect(wb.worksheets.filter(w => w.state === 'visible').map(w => w.name)).toEqual(['Операции', 'Счета', 'Бюджет', 'Цели', 'Курсы'])
