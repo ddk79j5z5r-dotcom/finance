@@ -6,7 +6,7 @@ import { disableLock, enrollFaceId, faceIdSupported, getLock, isLockEnabled, set
 import { AmountInput, Bar, Chips, CUR_SUFFIX, fromInput, Money, Section, Segmented, Sheet, toInput, useOnce } from './common'
 import { monthOf, plural, shiftMonth, todayISO } from '../domain/money'
 import { plannedInMonth, setupSteps, type PlannedEvent } from '../domain/calc'
-import { ADVANCE_LAST_DAY, hasOfficialCalendar, payForMonth, payMonthFor } from '../domain/pay'
+import { payForMonth, payMonthFor } from '../domain/pay'
 import { rateHint, type Data } from './data'
 import { Icon, type IconName } from './icons'
 import { ImportCk } from './ImportCk'
@@ -198,7 +198,7 @@ function PaySection({ data, onDone }: { data: Data; onDone: () => void }) {
         <>
           <label className="field-label">Оклад в месяц, до вычета НДФЛ</label>
           <AmountInput value={gross} onChange={setGross} suffix="₽" />
-          <label className="field-label">Надбавки и доплаты в месяц <span className="muted">(постоянные, делятся между авансом и зарплатой)</span></label>
+          <label className="field-label">Надбавки и доплаты в месяц <span className="muted">(постоянные, приходят с зарплатой)</span></label>
           <AmountInput value={bonus} onChange={setBonus} suffix="₽" placeholder="0" />
           <div className="row2">
             <div>
@@ -271,19 +271,18 @@ function PaySection({ data, onDone }: { data: Data; onDone: () => void }) {
                   </div>
                 )
                 const c = payForMonth(pay, payMonthFor(e.kind, e.date, { salaryDay: day(salaryDay), advanceDay: day(advanceDay) }))
-                const half = `1–${ADVANCE_LAST_DAY} ${monthGen(c.month)}`
                 return (
                   <div key={e.kind + e.date} className="pay-block">
                     <div className="line" style={{ padding: 0 }}><b>{e.kind === 'advance' ? 'Аванс' : 'Зарплата'} {shortDay(e.date)}</b><b className="pos">{r(e.amount)}</b></div>
                     {e.kind === 'advance' ? (
-                      <p>За {half}: {r(c.accrued)} × {c.halfDays} раб. дн. ÷ {c.days} раб. дн. = {r(c.advanceGross)} − НДФЛ {r(c.advanceTax)}</p>
+                      <p>За {monthNom(c.month)}: оклад {r(pay.gross)} ÷ 2 = {r(c.advanceGross)} − НДФЛ {r(c.advanceTax)}</p>
                     ) : (
                       <p>За {monthNom(c.month)}: начислено {r(c.accrued)} − НДФЛ {r(c.tax)} = {r(c.net)} на руки, минус аванс {r(c.advance)}</p>
                     )}
                   </div>
                 )
               })}
-              {pay.gross > 0 && <p className="hint" style={{ margin: 0 }}>Рабочие дни — по производственному календарю{!hasOfficialCalendar(Number(preview[0].date.slice(0, 4))) ? ' (для этого года — по общему правилу, может отличаться от постановления)' : ''}. Аванс — за 1–{ADVANCE_LAST_DAY} число месяца. Больничные, отпуск и неполный месяц не учитываются — такая выплата придёт меньше, в расчёт пойдёт фактическая сумма.</p>}
+              {pay.gross > 0 && <p className="hint" style={{ margin: 0 }}>Аванс — половина оклада без надбавок; надбавки, НДФЛ с них и вычеты учитываются в зарплате. Больничные, отпуск и неполный месяц не учитываются — такая выплата придёт меньше, в расчёт пойдёт фактическая сумма.</p>}
             </div>
       )}
       <button className="save" onClick={save}>Сохранить</button>
@@ -293,7 +292,6 @@ function PaySection({ data, onDone }: { data: Data; onDone: () => void }) {
 
 const GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
 const NOM = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь']
-const monthGen = (ym: string) => GEN[Number(ym.slice(5)) - 1]
 const monthNom = (ym: string) => NOM[Number(ym.slice(5)) - 1]
 const shortDay = (d: string) => `${Number(d.slice(8))} ${GEN[Number(d.slice(5, 7)) - 1].slice(0, 3)}.`
 

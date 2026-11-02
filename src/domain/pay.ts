@@ -1,77 +1,13 @@
 import type { Settings, Tx } from './types'
 
-// ---------- Производственный календарь (пятидневка) ----------
-
-/**
- * Нерабочие будни и рабочие выходные по постановлениям Правительства о переносе выходных.
- * Сверено с производственными календарями КонсультантПлюс на 2026 и 2027 годы.
- * Для других лет — общее правило ТК: праздник в выходной переносится на следующий рабочий день (кроме январских).
- */
-const OFFICIAL: Record<number, { off: string[]; work: string[] }> = {
-  2026: {
-    off: ['01-01', '01-02', '01-05', '01-06', '01-07', '01-08', '01-09', '02-23', '03-09', '05-01', '05-11', '06-12', '11-04', '12-31'],
-    work: [],
-  },
-  2027: {
-    off: ['01-01', '01-04', '01-05', '01-06', '01-07', '01-08', '02-22', '02-23', '03-08', '05-03', '05-10', '06-14', '11-04', '11-05', '12-31'],
-    work: ['02-20'],
-  },
-}
-
-/** Нерабочие праздничные дни (ст. 112 ТК РФ). */
-const HOLIDAYS = ['01-01', '01-02', '01-03', '01-04', '01-05', '01-06', '01-07', '01-08', '02-23', '03-08', '05-01', '05-09', '06-12', '11-04']
-
 const pad = (n: number) => String(n).padStart(2, '0')
 
-/** Нерабочие будни года по общему правилу: праздники плюс переносы с выходных (январские не переносятся). */
-function genericOff(year: number): Set<string> {
-  const off = new Set<string>()
-  for (const md of HOLIDAYS) {
-    const d = new Date(year, Number(md.slice(0, 2)) - 1, Number(md.slice(3)))
-    const wd = d.getDay()
-    if (wd !== 0 && wd !== 6) { off.add(md); continue }
-    if (md.startsWith('01-')) continue
-    const next = new Date(d)
-    do next.setDate(next.getDate() + 1)
-    while (next.getDay() === 0 || next.getDay() === 6 || HOLIDAYS.includes(`${pad(next.getMonth() + 1)}-${pad(next.getDate())}`))
-    off.add(`${pad(next.getMonth() + 1)}-${pad(next.getDate())}`)
-  }
-  return off
-}
-
-/** Есть ли для года официальный календарь (иначе расчёт по общему правилу — может разойтись с постановлением). */
-export const hasOfficialCalendar = (year: number) => year in OFFICIAL
-
-export function isWorkday(date: Date): boolean {
-  const y = date.getFullYear()
-  const md = `${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-  const cal = OFFICIAL[y]
-  if (cal?.work.includes(md)) return true
-  const wd = date.getDay()
-  if (wd === 0 || wd === 6) return false
-  return !(cal ? cal.off.includes(md) : genericOff(y).has(md))
-}
-
-/** Рабочие дни месяца YYYY-MM с дня `from` по день `to` включительно. */
-export function workdays(month: string, from = 1, to = 31): number {
-  const [y, m] = month.split('-').map(Number)
-  const last = new Date(y, m, 0).getDate()
-  let n = 0
-  for (let d = from; d <= Math.min(to, last); d++) if (isWorkday(new Date(y, m - 1, d))) n++
-  return n
-}
-
 // ---------- Аванс и зарплата по окладу ----------
-
-/** Аванс — за первую половину месяца (1–15 число), как в калькуляторе ipipip.ru/kz. */
-export const ADVANCE_LAST_DAY = 15
 
 export interface PayCalc {
   /** За какой месяц начисление. */
   month: string
   accrued: number   // начислено за месяц: оклад + надбавки (копейки)
-  days: number      // рабочих дней в месяце
-  halfDays: number  // рабочих дней с 1 по 15
   advanceGross: number
   advanceTax: number
   advance: number   // аванс на руки
@@ -84,19 +20,17 @@ export interface PayCalc {
 const tax = (base: number, rate: number) => Math.round(Math.max(0, base) * rate / 100 / 100) * 100
 
 /**
- * Расчёт месяца по окладу. Аванс = начислено × рабочие дни с 1 по 15 ÷ рабочие дни месяца − НДФЛ с этой суммы;
- * зарплата (остаток) = начислено − НДФЛ за месяц (с учётом вычетов) − аванс на руки.
+ * Расчёт месяца по окладу. Аванс = половина оклада − НДФЛ с неё;
+ * зарплата (остаток) = оклад + надбавки − НДФЛ за месяц (с учётом вычетов) − аванс на руки.
  */
 export function payForMonth(pay: NonNullable<Settings['pay']>, month: string): PayCalc {
   const accrued = pay.gross + pay.bonus
-  const days = workdays(month)
-  const halfDays = workdays(month, 1, ADVANCE_LAST_DAY)
-  const advanceGross = days ? Math.round((accrued * halfDays) / days) : 0
+  const advanceGross = Math.round(pay.gross / 2)
   const advanceTax = tax(advanceGross, pay.rate)
   const monthTax = tax(accrued - pay.deduction, pay.rate)
   const advance = advanceGross - advanceTax
   const net = accrued - monthTax
-  return { month, accrued, days, halfDays, advanceGross, advanceTax, advance, tax: monthTax, net, rest: net - advance }
+  return { month, accrued, advanceGross, advanceTax, advance, tax: monthTax, net, rest: net - advance }
 }
 
 const prevMonth = (month: string) => {
@@ -105,7 +39,7 @@ const prevMonth = (month: string) => {
 }
 
 /**
- * За какой месяц выплата. Аванс — всегда за первую половину месяца, в котором его платят.
+ * За какой месяц выплата. Аванс — всегда за месяц, в котором его платят.
  * Зарплата — остаток за месяц: если она приходит раньше аванса (зарплата 13-го, аванс 28-го) — за прошлый месяц,
  * если позже (аванс 13-го, зарплата 28-го) — за текущий.
  */
