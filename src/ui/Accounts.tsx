@@ -94,7 +94,7 @@ export function Accounts({ data, onOpenOps, onAdd, initialTab = 'accounts' }: {
         <>
           {groups.filter(([, list]) => list.length).map(([gTitle, list]) => (
             <div className="list grp" key={gTitle}>
-              <div className="grp-head"><span>{gTitle}</span><span className={sum(list) < 0 ? 'neg' : ''}><Money v={sum(list)} /></span></div>
+              <header className="grp-head"><span>{gTitle}</span><span className={sum(list) < 0 ? 'neg' : ''}><Money v={sum(list)} /></span></header>
                 {list.map(a => {
                   const b = data.value.get(a.id!) ?? 0
                   const hasBonds = (data.bondValue.get(a.id!) ?? 0) > 0

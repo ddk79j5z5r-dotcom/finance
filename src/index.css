@@ -16,6 +16,7 @@
   --sheet: #161618;
   --sep: rgba(255, 255, 255, 0.075);
   --edge: rgba(255, 255, 255, 0.06); /* тонкая кромка карточек на чёрном */
+  --bar-bg: color-mix(in srgb, #0c0c0e 82%, transparent); /* полупрозрачная нижняя панель */
   /* Текст */
   --text: #f2f2f3;
   --text-2: #b2b5bc;      /* вторичный — читаемый */
@@ -47,7 +48,7 @@
 @media (prefers-color-scheme: light) {
   :root {
     color-scheme: light;
-    --bg: #f2f2f5; --s1: #ffffff; --s2: #f0f0f3; --s3: #e4e4e9; --sheet: #ffffff; --sep: rgba(0, 0, 0, 0.08); --edge: rgba(0, 0, 0, 0.04);
+    --bg: #f2f2f5; --s1: #ffffff; --s2: #f0f0f3; --s3: #e4e4e9; --sheet: #ffffff; --sep: rgba(0, 0, 0, 0.08); --edge: rgba(0, 0, 0, 0.04); --bar-bg: color-mix(in srgb, #f9f9fb 84%, transparent);
     --text: #111316; --text-2: #4a4e56; --muted: #6e727a;
     --accent: #ffd426; --on-accent: #1d1700; --accent-ink: #8a6c00; --accent-soft: rgba(255, 212, 38, 0.22);
     --pos: #148a4a; --neg: #d1342a; --warn: #a8640a; --coupon: #6d4fe0; --info: #1f6fd1; --transfer: #5d626d; --press: rgba(0, 0, 0, 0.05);
@@ -318,7 +319,7 @@ button.row:active, .row.down, .row-main.down { background: var(--press); }
 /* ---------- Нижняя панель: компактная, плюс меньше, активный пункт — цветом ---------- */
 .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: grid; grid-template-columns: repeat(5, 1fr); align-items: center;
   height: calc(var(--tabbar) + env(safe-area-inset-bottom)); padding: 0 max(4px, env(safe-area-inset-left)) env(safe-area-inset-bottom) max(4px, env(safe-area-inset-right));
-  background: color-mix(in srgb, #0c0c0e 82%, transparent); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
+  background: var(--bar-bg); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
   border-top: 1px solid var(--sep); }
 .tabs button { display: grid; justify-items: center; align-content: center; gap: 1px; min-height: 2.8rem; font-size: 0.6rem; font-weight: 500; color: var(--muted); }
 .tabs button svg { width: 1.3rem; height: 1.3rem; }
@@ -603,3 +604,5 @@ button, .row-main, label.chip, .date-chip { transition: transform .2s cubic-bezi
 .key { height: 2.9rem; border-radius: 9px; background: #3a3a3e; font-size: 1.45rem; font-weight: 400; box-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
 .key.op { background: #2a2a2d; color: var(--text); }
 @media (prefers-color-scheme: light) { .key { background: #fff; } .key.op { background: #d1d3d9; } .keypad { background: #e3e4e8; } }
+.goal-actions .link { font-size: 0.824rem; font-weight: 600; }
+.cal button { gap: 5px; }

@@ -111,7 +111,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
             <span className="cap">Доступно до {nextLabel}</span>
             <BigMoney v={avail.total} className={avail.total < 0 ? 'hero-v neg' : 'hero-v'} />
             <span className="hero-day">
-              {avail.total > 0 ? <>≈ <b><Money v={avail.perDay} /></b> в день · </> : 'Не хватает до выплаты · '}{avail.days} {plural(avail.days, ['день', 'дня', 'дней'])}
+              {avail.total > 0 ? <>≈ <b><Money v={avail.perDay} /></b> в день · </> : avail.total < 0 ? 'Не хватает до выплаты · ' : 'Свободных денег нет · '}{avail.days} {plural(avail.days, ['день', 'дня', 'дней'])}
               <Icon name="right" size={14} />
             </span>
           </button>
@@ -185,7 +185,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
           <span className="tile-ico out"><Icon name="expense" size={18} stroke={2.2} /></span>
           <span className="k">Расходы</span>
           <span className="v"><Money v={totals.expense} whole /></span>
-          <span className="s">{totals.income || totals.expense ? <>разница <Money v={totals.income - totals.expense} sign whole /></> : `в ${monthIn}`}</span>
+          <span className="s">в {monthIn}</span>
         </button>
       </div>
 
