@@ -9,8 +9,9 @@ import { BondEventSheet } from './Bonds'
 import { BigMoney, Empty, Money, Section, Sheet, setAmountsHidden, useAmountsHidden } from './common'
 import { activeAccounts, type Data } from './data'
 import { Icon } from './icons'
-import { CategoryRow, EventSheet, GoalRow, PaymentRow, TxRow, TxSheet, shortDate } from './rows'
-import type { OpsFilter } from './History'
+import { CategoryRow, EventSheet, GoalRow, PaymentRow, TxRow, TxSheet } from './rows'
+import { shortDate } from '../domain/format'
+import type { OpsFilter } from '../domain/ops'
 
 const MONTH_IN = ['январе', 'феврале', 'марте', 'апреле', 'мае', 'июне', 'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре']
 
@@ -57,9 +58,11 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
   const allocated = new Set(data.allocations.map(a => a.txId))
   const pending = data.txs.filter(t => t.type === 'income' && monthOf(t.date) === month && !allocated.has(t.id!))
   const WEEK = 7 * 864e5
+  // «Сейчас» фиксируем при монтировании — чистый рендер
+  const [now] = useState(() => Date.now())
   const exportStale = data.txs.length > 0
-    && (!data.settings.lastExportAt || Date.now() - data.settings.lastExportAt > WEEK)
-    && (!data.settings.backupNudgeAt || Date.now() - data.settings.backupNudgeAt > WEEK)
+    && (!data.settings.lastExportAt || now - data.settings.lastExportAt > WEEK)
+    && (!data.settings.backupNudgeAt || now - data.settings.backupNudgeAt > WEEK)
   const nextLabel = avail ? `${avail.next.kind === 'salary' ? 'зарплаты' : 'аванса'} ${shortDate(avail.next.date)}` : ''
 
   // Шкала ближайшего: сегодня и следующие даты с поступлениями и неоплаченными платежами (до трёх).
@@ -117,7 +120,7 @@ export function Home({ data, onDistribute, onOpenBudget, onOpenCalendar, onOpenB
       <div className="page-head">
         <div>
           <h1>Финансы</h1>
-          <span className="sub">{new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+          <span className="sub">{new Date(today + 'T00:00:00').toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
         </div>
         <button className="round-btn" aria-label={hidden ? 'Показать суммы' : 'Скрыть суммы'} aria-pressed={hidden} onClick={() => setAmountsHidden(!hidden)}>
           <Icon name={hidden ? 'eyeOff' : 'eye'} size={20} stroke={1.8} />

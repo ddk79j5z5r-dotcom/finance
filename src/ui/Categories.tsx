@@ -6,7 +6,7 @@ import type { Category, CategoryKind } from '../domain/types'
 import { Empty, Section, Segmented, Sheet, useOnce } from './common'
 import type { Data } from './data'
 import { Badge, CATEGORY_COLORS, CATEGORY_ICONS, CatBadge, categoryLook, Icon } from './icons'
-import { categoryPath } from './Pickers'
+import { categoryPath } from '../domain/ops'
 import { notify } from './undo'
 
 const opsWord = (n: number) => `${n} ${plural(n, ['операция', 'операции', 'операций'])}`

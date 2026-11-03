@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { db } from '../db'
 import { byOrder, kindOf, nameTaken } from '../domain/categories'
+import { categoryPath } from '../domain/ops'
 import type { Category, CategoryKind } from '../domain/types'
 import { Empty, Section, Sheet } from './common'
 import type { Data } from './data'
@@ -18,14 +19,6 @@ export function PickRow({ icon, label, value, extra, onClick, empty = false }: {
       <Icon name="right" size={18} />
     </button>
   )
-}
-
-/** Полное название: «Родитель · Подкатегория». */
-export function categoryPath(categories: Category[], id: number | null | undefined) {
-  const c = categories.find(x => x.id === id)
-  if (!c) return ''
-  const p = c.parentId != null ? categories.find(x => x.id === c.parentId) : undefined
-  return p ? `${p.name} · ${c.name}` : c.name
 }
 
 /**

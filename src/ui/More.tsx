@@ -4,7 +4,7 @@ import { refreshLatestRate } from '../domain/rates'
 import { CURRENCIES, type Category, type Currency, type Recurring } from '../domain/types'
 import { disableLock, enrollFaceId, faceIdSupported, getLock, isLockEnabled, setPin } from '../lock'
 import { AmountInput, Bar, Chips, CUR_SUFFIX, fromInput, Money, Section, Sheet, toInput, useOnce } from './common'
-import { plural } from '../domain/money'
+import { plural, todayISO } from '../domain/money'
 import { setupSteps } from '../domain/calc'
 import { rateHint, type Data } from './data'
 import { Icon, type IconName } from './icons'
@@ -44,10 +44,11 @@ export function More({ data, section, setSection, onOpenPage }: {
   const accounts = data.accounts.filter(a => !a.archived)
   const brokers = accounts.filter(a => data.trades.some(t => t.accountId === a.id) || a.kind === 'broker')
   const positions = data.bondPositions.filter(p => p.qty > 0)
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayISO()
+  const [now] = useState(() => Date.now()) // фиксируем при монтировании — чистый рендер
   const nextCoupon = data.bonds.flatMap(b => b.coupons.filter(c => c.date >= today).slice(0, 1).map(c => c.date)).sort()[0]
   const recurring = data.recurring.filter(x => x.active)
-  const backupAgo = data.settings.lastExportAt ? Math.floor((Date.now() - data.settings.lastExportAt) / 864e5) : null
+  const backupAgo = data.settings.lastExportAt ? Math.floor((now - data.settings.lastExportAt) / 864e5) : null
   return (
     <div className="page">
       <div className="page-head"><h1>Ещё</h1></div>
@@ -297,12 +298,19 @@ function SecuritySection() {
   const [hasFaceId, setHasFaceId] = useState(false)
   const [pin, setPinValue] = useState('')
   const [msg, setMsg] = useState('')
-  const load = async () => {
-    const l = await getLock()
+  const load = () => getLock().then(l => {
     setEnabled(isLockEnabled(l))
     setHasFaceId(!!l.credentialId)
-  }
-  useEffect(() => { load() }, [])
+  })
+  useEffect(() => {
+    let alive = true
+    getLock().then(l => {
+      if (!alive) return
+      setEnabled(isLockEnabled(l))
+      setHasFaceId(!!l.credentialId)
+    })
+    return () => { alive = false }
+  }, [])
   if (enabled === null) return null
 
   async function savePin() {

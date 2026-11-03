@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { envelopePlan, envelopes, rootOf, spendRub, subEnvelopes } from '../domain/calc'
+import { envelopePlan, envelopes, spendRub, subEnvelopes } from '../domain/calc'
 import { byOrder } from '../domain/categories'
 import { monthLabel, monthOf, plural, shiftMonth, todayISO } from '../domain/money'
 import { INCOME_LABEL, type IncomeKind, type Tx, type TxType } from '../domain/types'
@@ -7,36 +7,13 @@ import { LimitSheet } from './Budget'
 import { Empty, Money, Sheet } from './common'
 import { rootCategories, type Data } from './data'
 import { Icon } from './icons'
-import { categoryPath } from './Pickers'
-import { CategoryRow, dayTitle, TxRow, TxSheet, txLook } from './rows'
+import { dayTitle } from '../domain/format'
+import { categoryPath, matches, type OpsFilter } from '../domain/ops'
+import { CategoryRow, TxRow, TxSheet } from './rows'
+import { txLook } from './look'
 import { useMonthSlide } from './nav'
 
-/** Фильтр списка операций. Категория включает свои подкатегории; счёт — и списания, и зачисления. */
-export interface OpsFilter {
-  accountId?: number
-  categoryId?: number
-  from?: string // YYYY-MM
-  to?: string
-  incomeKind?: IncomeKind
-  /** Только операции без категории (расходы, где категорию не выбрали). */
-  noCategory?: boolean
-  tag?: string
-}
-
 type TypeFilter = 'all' | TxType
-
-export function matches(data: Data, t: Tx, f: OpsFilter): boolean {
-  if (f.accountId != null && t.accountId !== f.accountId && t.toAccountId !== f.accountId) return false
-  // Категория — вместе с подкатегориями; возвраты относятся к категории покупки.
-  if (f.categoryId != null && (t.type === 'transfer' || t.type === 'adjust' || (t.categoryId !== f.categoryId && rootOf(data.categories, t.categoryId)?.id !== f.categoryId))) return false
-  if (f.noCategory && !((t.type === 'expense' || t.type === 'refund') && t.categoryId == null)) return false
-  if (f.tag && !t.tags?.includes(f.tag)) return false
-  if (f.incomeKind && (t.type !== 'income' || t.incomeKind !== f.incomeKind)) return false
-  const m = monthOf(t.date)
-  if (f.from && m < f.from) return false
-  if (f.to && m > f.to) return false
-  return true
-}
 
 function periodLabel(f: OpsFilter) {
   if (!f.from && !f.to) return 'Всё время'

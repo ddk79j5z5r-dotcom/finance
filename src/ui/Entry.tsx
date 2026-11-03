@@ -10,7 +10,8 @@ import { AmountInput, CUR_SUFFIX, fromInput, Money, Segmented, Sheet, toInput, u
 import { activeAccounts, type Data } from './data'
 import { CatBadge, Icon } from './icons'
 import { applyKey, Keypad } from './Keypad'
-import { categoryPath, CategoryPicker } from './Pickers'
+import { categoryPath, transferMeaning } from '../domain/ops'
+import { CategoryPicker } from './Pickers'
 
 /** Режим формы: обычные типы операций и составные — платёж по кредиту (перевод + проценты). */
 type Mode = TxType | 'loan'
@@ -23,20 +24,6 @@ const MODE_LABEL: Record<Mode, string> = { expense: 'Расход', income: 'Д�
 
 const yesterday = () => { const d = new Date(); d.setDate(d.getDate() - 1); return todayISO(d) }
 const newGroup = () => `g${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
-
-/** Название перевода по типам счетов: так видно, что это погашение кредита или выдача долга, а не расход. */
-export function transferMeaning(data: Data, fromId?: number | null, toId?: number | null): string {
-  const a = data.accounts.find(x => x.id === fromId), b = data.accounts.find(x => x.id === toId)
-  if (!a || !b) return 'Перевод между своими счетами'
-  const ka = accountKind(a), kb = accountKind(b)
-  if (kb === 'credit') return 'Погашение долга — не расход'
-  if (ka === 'credit') return 'Получение кредита или займа — не доход'
-  if (kb === 'debt') return 'Выдача в долг — не расход'
-  if (ka === 'debt') return 'Возврат долга мне — не доход'
-  if (kb === 'broker') return 'Пополнение брокерского счёта — не расход'
-  if (kb === 'savings') return 'Откладываю в копилку — не расход'
-  return 'Перевод между своими счетами — не доход и не расход'
-}
 
 /** Своя категория расходов по слову в названии (подкатегория важнее родителя); нет — запись без категории. */
 function categoryByName(data: Data, re: RegExp): number | null {

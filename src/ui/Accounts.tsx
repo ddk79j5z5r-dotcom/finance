@@ -8,11 +8,12 @@ import { formatMoney, monthGenitive, monthOf, plural, todayISO } from '../domain
 import { ACCOUNT_COLORS, CURRENCIES, type Account, type AccountColor, type AccountKind, type Currency } from '../domain/types'
 import { AccountBadge, COLOR_LABEL } from './AccountBadge'
 import { AmountInput, BigMoney, Chips, CUR_SUFFIX, Empty, fromInput, Money, Section, Segmented, Sheet, toInput, useOnce } from './common'
-import { BondEventRow, goalPct, monthYear } from './rows'
+import { BondEventRow } from './rows'
+import { goalPct, monthYear } from '../domain/format'
 import { bondEvents } from '../domain/bonds'
 import { inTotal } from '../domain/plan'
 import { activeAccounts, rateHint, type Data } from './data'
-import type { OpsFilter } from './History'
+import type { OpsFilter } from '../domain/ops'
 import { Icon } from './icons'
 import { notify } from './undo'
 
@@ -50,7 +51,7 @@ export function Accounts({ data, onOpenOps, onAdd, initialTab = 'accounts' }: {
   const portfolio = sum(brokers)
   const cashInBroker = brokers.reduce((s, a) => s + (data.toRub(data.bal.get(a.id!) ?? 0, a.currency) ?? 0), 0)
   const profit = data.bondPositions.filter(p => p.qty > 0).reduce((s, p) => s + p.profit, 0)
-  const in60 = new Date(); in60.setDate(in60.getDate() + 60)
+  const in60 = new Date(todayISO() + 'T00:00:00'); in60.setDate(in60.getDate() + 60)
   const coupons = tab === 'invest' ? bondEvents(data.trades, data.bonds, todayISO(), todayISO(in60), data.taxFree).slice(0, 5) : []
   const title = tab === 'invest' ? 'Инвестиции' : tab === 'goals' ? 'Цели' : 'Счета'
 
