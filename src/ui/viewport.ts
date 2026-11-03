@@ -19,20 +19,23 @@ export function trackVisualViewport() {
   let fullH = window.innerHeight
   let textFocused = false
 
+  // Запись в стиль корня только при изменении: иначе на каждом шаге прокрутки Safari пересчитывает стили всей страницы.
+  const last: Record<string, string> = {}
+  const set = (k: string, v: string) => { if (last[k] !== v) { last[k] = v; root.style.setProperty(k, v) } }
   const update = () => {
     if (!vv || !textFocused) {
       fullH = window.innerHeight
-      root.style.setProperty('--vvh', `${window.innerHeight}px`)
-      root.style.setProperty('--vvtop', '0px')
-      root.style.setProperty('--kb', '0px')
-      root.classList.toggle('kb-open', textFocused)
+      set('--vvh', `${window.innerHeight}px`)
+      set('--vvtop', '0px')
+      set('--kb', '0px')
+      if (root.classList.contains('kb-open') !== textFocused) root.classList.toggle('kb-open', textFocused)
       return
     }
     const kb = Math.max(0, fullH - vv.height - vv.offsetTop)
-    root.style.setProperty('--vvh', `${vv.height}px`)
-    root.style.setProperty('--vvtop', `${vv.offsetTop}px`)
-    root.style.setProperty('--kb', `${kb}px`)
-    root.classList.add('kb-open')
+    set('--vvh', `${vv.height}px`)
+    set('--vvtop', `${vv.offsetTop}px`)
+    set('--kb', `${kb}px`)
+    if (!root.classList.contains('kb-open')) root.classList.add('kb-open')
   }
 
   vv?.addEventListener('resize', update)

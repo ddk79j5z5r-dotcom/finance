@@ -121,13 +121,6 @@ export function Pushed({ title, backLabel, onBack, under, closeSignal = 0, child
     if (s.x + project(v) > s.w / 2) close(v)
     else s.stop = spring(s.x, 0, v, { damping: 0.9, response: 0.3 }, place)
   }
-  useEffect(() => {
-    const el = ref.current!
-    const block = (e: TouchEvent) => { if (st.current.drag?.on) e.preventDefault() }
-    el.addEventListener('touchmove', block, { passive: false })
-    return () => el.removeEventListener('touchmove', block)
-  }, [])
-
   return (
     <div ref={ref} className="pushed" role="region" aria-label={title} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
       <div ref={scroller} className="pushed-scroll">

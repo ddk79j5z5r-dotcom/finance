@@ -26,10 +26,11 @@ trackVisualViewport()
 trackPress()
 
 // Без зума щипком: Safari на iPhone игнорирует user-scalable=no, поэтому гасим жест вручную.
+// Только gesture-события: обработчик touchmove с passive: false на документе заставлял Safari ждать
+// JavaScript перед каждым шагом прокрутки — отсюда подтормаживания при скролле.
 for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
   document.addEventListener(ev, e => e.preventDefault(), { passive: false })
 }
-document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault() }, { passive: false })
 
 // Просим браузер не вытеснять данные при нехватке места.
 navigator.storage?.persist?.()

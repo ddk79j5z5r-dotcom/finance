@@ -66,7 +66,7 @@ html { font-size: 17px; }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; background: var(--bg); color: var(--text); }
-html { touch-action: manipulation; }
+html { touch-action: manipulation; } /* без задержки касания и зума двойным тапом */
 body { font: 1rem/1.4 var(--font); -webkit-text-size-adjust: 100%; overscroll-behavior-y: none; }
 body.noscroll { overflow: hidden; }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
@@ -432,7 +432,9 @@ button, .row-main, label.chip, .date-chip { transition: transform .2s cubic-bezi
 
 /* ---------- Подраздел, выезжающий справа ---------- */
 .tab-root { transform-origin: 0 50%; } /* без постоянного will-change: он ломает position: fixed внутри раздела */
-.pushed { position: fixed; inset: 0; z-index: 9; background: var(--bg); box-shadow: -12px 0 30px rgba(0, 0, 0, 0.35); will-change: transform; }
+.pushed { position: fixed; inset: 0; z-index: 9; background: var(--bg); box-shadow: -12px 0 30px rgba(0, 0, 0, 0.35); will-change: transform;
+  /* Вертикальную прокрутку ведёт браузер без ожидания JavaScript; горизонтальное смахивание назад — наше. */
+  touch-action: pan-y; }
 .pushed-scroll { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
   padding-bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 1.2rem); }
 .topbar.in-push { position: sticky; margin-bottom: calc(-1 * (env(safe-area-inset-top, 0px) + 2.6rem)); }

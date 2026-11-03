@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { LockRow } from './db'
 import type { Tx } from './domain/types'
 import { monthOf, todayISO } from './domain/money'
@@ -112,6 +112,7 @@ export default function App() {
       <main>
         {(Object.keys(screens) as Tab[]).map(t => (
           <div key={t} hidden={t !== tab}>
+            <Frozen active={t === tab}>
             <div ref={roots[t]} className="tab-root">
               <TopBar title={TAB_TITLE[t]} active={t === tab && !pushed[t]} />
               {screens[t]}
@@ -122,6 +123,7 @@ export default function App() {
                 {page(pushed[t]!)}
               </Pushed>
             )}
+            </Frozen>
           </div>
         ))}
       </main>
@@ -152,3 +154,11 @@ export default function App() {
     </div>
   )
 }
+
+/**
+ * Скрытая вкладка не перерисовывается при каждом изменении данных — только видимая.
+ * Открыли вкладку — она один раз перерисуется со свежими данными (состояние внутри сохраняется).
+ */
+const Frozen = memo(function Frozen({ children }: { active: boolean; children: ReactNode }) {
+  return <>{children}</>
+}, (prev, next) => !prev.active && !next.active)
