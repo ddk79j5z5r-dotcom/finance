@@ -12,8 +12,9 @@ export function parseAmount(input: string): number | null {
 
 /** 1250000 → "12 500 ₽"; копейки показываются, только если они есть. */
 export function formatMoney(minor: number, currency: Currency = 'RUB'): string {
-  const neg = minor < 0
-  const abs = Math.abs(Math.round(minor))
+  const rounded = Math.round(minor)
+  const neg = rounded < 0 // −0,4 копейки округляются до нуля — без «−0»
+  const abs = Math.abs(rounded)
   const int = Math.floor(abs / 100)
   const frac = abs % 100
   const intStr = String(int).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
@@ -21,11 +22,13 @@ export function formatMoney(minor: number, currency: Currency = 'RUB'): string {
   return `${neg ? '−' : ''}${body} ${SYMBOL[currency]}`
 }
 
-/** Для полей ввода: 123450 → "1234,5". */
+/** Для полей ввода: 123450 → "1234,5"; −150 → "-1,5". */
 export function amountToInput(minor: number): string {
-  const int = Math.floor(minor / 100)
-  const frac = minor % 100
-  return frac ? `${int},${String(frac).padStart(2, '0').replace(/0$/, '')}` : String(int)
+  const sign = minor < 0 ? '-' : ''
+  const abs = Math.abs(minor)
+  const int = Math.floor(abs / 100)
+  const frac = abs % 100
+  return sign + (frac ? `${int},${String(frac).padStart(2, '0').replace(/0$/, '')}` : String(int))
 }
 
 export const toMajor = (minor: number) => minor / 100

@@ -170,7 +170,7 @@ export function Accounts({ data, onOpenOps, onAdd, initialTab = 'accounts' }: {
                     <span className="goal-sum"><Money v={p.saved} cur={a.currency} whole /> <span className="muted">из <Money v={p.goal.target} cur={a.currency} whole /></span></span>
                   </span>
                 </button>
-                <div className="goal-line"><span className="bar thick"><span className="fill" style={{ display: 'block', width: `${Math.min(100, g.width)}%` }} /></span><span className="pct">{g.label}</span></div>
+                <div className="goal-line"><span className="bar thick"><span className="fill" style={{ display: 'block', width: `${g.width}%` }} /></span><span className="pct">{g.label}</span></div>
                 {p.remaining > 0 && p.goal.deadline && plan && (
                   <p className="goal-plan">Взнос <Money v={plan.monthly} cur={a.currency} whole /> в месяц · {plan.left > 0 ? <>в этом месяце ещё <Money v={plan.left} cur={a.currency} whole /></> : <span className="pos">этот месяц закрыт</span>}</p>
                 )}

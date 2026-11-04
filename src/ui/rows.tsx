@@ -111,7 +111,7 @@ export function GoalRow({ data, p, onOpen }: { data: Data; p: GoalProgress; onOp
       <span className="body">
         <span className="title">{p.goal.name}</span>
         <span className="goal-amt"><Money v={p.saved} cur={a?.currency} whole /> <span className="muted">из <Money v={p.goal.target} cur={a?.currency} whole /></span></span>
-        <span className="goal-line"><span className="bar"><span className="fill" style={{ display: 'block', width: `${Math.min(100, g.width)}%` }} /></span><span className="pct">{g.label}</span></span>
+        <span className="goal-line"><span className="bar"><span className="fill" style={{ display: 'block', width: `${g.width}%` }} /></span><span className="pct">{g.label}</span></span>
         {p.goal.deadline && <span className="sub">до {monthYear(p.goal.deadline)}</span>}
       </span>
     </button>

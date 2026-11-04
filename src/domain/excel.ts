@@ -142,6 +142,8 @@ export async function importWorkbook(db: FinanceDB, data: ArrayBuffer): Promise<
   } catch {
     throw new ImportError('Данные в файле повреждены')
   }
+  // Корректный JSON, но не копия (null, массив, без таблиц) — тоже повреждённый файл, а не падение.
+  if (!snap || typeof snap !== 'object' || !snap.tables || typeof snap.tables !== 'object') throw new ImportError('Данные в файле повреждены')
   if (snap.version > BACKUP_VERSION) throw new ImportError('Файл создан более новой версией приложения — обнови приложение')
 
   await db.transaction('rw', BACKUP_TABLES.map(t => db.table(t)), async () => {

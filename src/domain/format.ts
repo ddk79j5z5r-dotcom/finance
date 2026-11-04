@@ -21,12 +21,12 @@ export function txTime(t: Tx) {
   return todayISO(d) === t.date ? d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : null
 }
 
-/** Доля накопленного: при очень малой сумме — «<1%», а не ноль, и шкала не пустая. */
+/** Доля накопленного: при очень малой сумме — «<1%», а не ноль, и шкала не пустая; шкала не длиннее 100%. */
 export function goalPct(saved: number, target: number) {
   if (target <= 0) return { pct: 0, label: '—', width: 0 }
   const raw = (saved / target) * 100
   const pct = Math.min(100, Math.floor(raw))
-  return { pct, label: saved > 0 && raw < 1 ? '<1%' : `${pct}%`, width: saved > 0 ? Math.max(raw, 1.5) : 0 }
+  return { pct, label: saved > 0 && raw < 1 ? '<1%' : `${pct}%`, width: saved > 0 ? Math.min(100, Math.max(raw, 1.5)) : 0 }
 }
 
 const MONTH_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']

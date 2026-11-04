@@ -142,8 +142,7 @@ describe('Excel: импорт', () => {
     expect(await db.txs.count()).toBe(1)
   })
 
-  // ЗАМЕЧАНИЕ: валидный JSON без объекта (например `null` или `[]`) даёт TypeError, а не ImportError.
-  it.skip('валидный JSON, не являющийся копией, даёт ImportError', async () => {
+  it('валидный JSON, не являющийся копией, даёт ImportError', async () => {
     await expect(importWorkbook(freshDb(), await workbookWithBackup(['null']))).rejects.toBeInstanceOf(ImportError)
   })
 })
